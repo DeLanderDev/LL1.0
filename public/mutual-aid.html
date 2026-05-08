@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mutual Aid — Local Lee</title>
+  <meta name="description" content="Mutual aid in Lee County, Illinois — a directory of food pantries, warming centers, and family resources, plus a community board of needs and offers, all reviewed before posting.">
+  <link rel="canonical" href="https://locallee.org/mutual-aid">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Mutual Aid — Local Lee">
+  <meta property="og:description" content="Mutual aid in Lee County, Illinois — a directory of food pantries, warming centers, and family resources, plus a community board of needs and offers, all reviewed before posting.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/mutual-aid">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <h1>Mutual aid in Lee County</h1>
+      <p>A directory of pantries, warming centers, and family resources, plus a community board where neighbors post what they need and what they can offer. Posts are reviewed before they go live and refresh every thirty days.</p>
+    </div>
+
+    <div class="notice">
+      <strong>How this works.</strong> An editor reviews every post before it appears. We don't host messaging here — when you reply to a post you're contacting a neighbor directly with the contact info they shared. Use ordinary good sense.
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-which="resources">Resource directory</button>
+      <button class="tab" role="tab" aria-selected="false" data-which="needs">Needs</button>
+      <button class="tab" role="tab" aria-selected="false" data-which="offers">Offers</button>
+    </div>
+
+    <div id="panel-resources" class="panel">
+      <p>Established organizations and ongoing programs serving Lee County. <a href="/submit/aid-resource">Suggest a resource →</a></p>
+      <div id="resources" class="card-grid" aria-busy="true"></div>
+    </div>
+
+    <div id="panel-needs" class="panel" hidden>
+      <p>Neighbors who could use a hand right now. <a href="/submit/aid-post?kind=need">Post a need →</a></p>
+      <ul class="row-list" id="needs" aria-busy="true"></ul>
+    </div>
+
+    <div id="panel-offers" class="panel" hidden>
+      <p>Neighbors offering a hand right now. <a href="/submit/aid-post?kind=offer">Post an offer →</a></p>
+      <ul class="row-list" id="offers" aria-busy="true"></ul>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    function showPanel(which) {
+      document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.which === which ? 'true' : 'false'));
+      document.querySelectorAll('.panel').forEach(p => p.hidden = true);
+      document.getElementById('panel-' + which).hidden = false;
+    }
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showPanel(t.dataset.which)));
+
+    function postCard(p) {
+      const days = LL.daysUntil(p.expires_at);
+      return `<li>
+        <div><span class="tag kind-${p.kind}">${p.kind === 'need' ? 'Need' : 'Offer'}</span>${p.category ? ' <span class="tag">' + LL.escape(p.category) + '</span>' : ''}${p.town ? ' <span class="tag">' + LL.escape(p.town) + '</span>' : ''} <span class="tag expires">${days} day${days === 1 ? '' : 's'} left</span></div>
+        <h3 style="margin:0.3em 0 0"><a href="/mutual-aid/post/${p.id}">${LL.escape(p.title)}</a></h3>
+        <p>${LL.escape(p.body.slice(0, 280))}${p.body.length > 280 ? '…' : ''}</p>
+        <div class="meta">${p.contact_name ? 'Posted by ' + LL.escape(p.contact_name) + ' · ' : ''}${LL.escape(LL.formatDate(p.created_at))}</div>
+      </li>`;
+    }
+
+    (async () => {
+      try {
+        const { resources } = await LL.api('/api/aid/resources');
+        const grouped = {};
+        for (const r of resources) (grouped[r.category] = grouped[r.category] || []).push(r);
+        const root = document.getElementById('resources');
+        if (!resources.length) {
+          root.innerHTML = '<p class="dim">No resources listed yet.</p>';
+        } else {
+          root.innerHTML = resources.map(r => `
+            <article class="card">
+              <h3>${LL.escape(r.name)}</h3>
+              <div class="meta">${LL.escape(r.category)}${r.town ? ' · ' + LL.escape(r.town) : ''}</div>
+              <p>${LL.escape(r.description || '')}</p>
+              ${r.address ? '<p class="small">' + LL.escape(r.address) + '</p>' : ''}
+              ${r.phone ? '<p class="small">📞 ' + LL.escape(r.phone) + '</p>' : ''}
+              ${r.website ? '<p class="small">🌐 <a href="' + LL.escape(r.website) + '" rel="noopener">' + LL.escape(r.website) + '</a></p>' : ''}
+              ${r.hours ? '<p class="small"><strong>Hours:</strong> ' + LL.escape(r.hours) + '</p>' : ''}
+            </article>`).join('');
+        }
+        root.setAttribute('aria-busy', 'false');
+      } catch (e) {
+        document.getElementById('resources').innerHTML = '<p class="dim">Couldn\'t load resources.</p>';
+      }
+
+      try {
+        const { posts: needs } = await LL.api('/api/aid/posts?kind=need');
+        const ul = document.getElementById('needs');
+        ul.innerHTML = needs.length ? needs.map(postCard).join('') : '<li class="dim">No open needs right now.</li>';
+        ul.setAttribute('aria-busy', 'false');
+      } catch (e) {}
+
+      try {
+        const { posts: offers } = await LL.api('/api/aid/posts?kind=offer');
+        const ul = document.getElementById('offers');
+        ul.innerHTML = offers.length ? offers.map(postCard).join('') : '<li class="dim">No open offers right now.</li>';
+        ul.setAttribute('aria-busy', 'false');
+      } catch (e) {}
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — Local Lee</title>
+  <meta name="description" content="Local Lee admin dashboard.">
+  <link rel="canonical" href="https://locallee.org/admin">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Admin — Local Lee">
+  <meta property="og:description" content="Local Lee admin dashboard.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/admin">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  <meta name="robots" content="noindex">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <h1>Admin queue</h1>
+      <p>Pending submissions awaiting review.</p>
+    </div>
+    <div id="auth-gate" hidden>
+      <div class="notice error">You need to sign in as an administrator. <a href="/login?next=/admin">Sign in →</a></div>
+    </div>
+    <div id="dash" hidden>
+      <section><h2>Businesses</h2><div id="q-businesses"></div></section>
+      <section><h2>Business claim requests</h2><div id="q-claims"></div></section>
+      <section><h2>Events</h2><div id="q-events"></div></section>
+      <section><h2>Books</h2><div id="q-books"></div></section>
+      <section><h2>Mutual aid — resources</h2><div id="q-aid-resources"></div></section>
+      <section><h2>Mutual aid — needs &amp; offers</h2><div id="q-aid-posts"></div></section>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    function row(label, body, actions) {
+      return `<article class="card" style="margin-bottom:1em">
+        <div class="meta">${label}</div>
+        ${body}
+        <div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">${actions}</div>
+      </article>`;
+    }
+
+    async function action(type, id, decision, claim) {
+      const url = claim
+        ? '/api/admin/business/' + id + '/claim/' + decision
+        : '/api/admin/' + type + '/' + id + '/' + decision;
+      try {
+        await LL.api(url, { method: 'POST' });
+        await load();
+      } catch (err) { alert(err.message); }
+    }
+    window.action = action;
+
+    async function load() {
+      const me = (await LL.api('/api/me')).user;
+      if (!me || me.role !== 'admin') {
+        document.getElementById('auth-gate').hidden = false;
+        return;
+      }
+      document.getElementById('dash').hidden = false;
+      const q = await LL.api('/api/admin/queue');
+
+      const businesses = q.businesses.filter(b => b.status === 'pending');
+      const claims = q.businesses.filter(b => b.status === 'approved' && b.claim_status === 'claim_pending');
+
+      document.getElementById('q-businesses').innerHTML = businesses.length
+        ? businesses.map(b => row(
+            (b.category_name || '—') + (b.town ? ' · ' + b.town : ''),
+            '<h3 style="margin:0">' + LL.escape(b.name) + '</h3>' + (b.description ? '<p>' + LL.escape(b.description) + '</p>' : '') +
+              '<p class="small">' + [b.address, b.phone, b.email, b.website].filter(Boolean).map(LL.escape).join(' · ') + '</p>',
+            '<button class="btn btn-field" onclick="action(\'business\',' + b.id + ',\'approve\')">Approve</button>' +
+            '<button class="btn btn-barn" onclick="action(\'business\',' + b.id + ',\'reject\')">Reject</button>'
+          )).join('')
+        : '<p class="dim">Nothing pending.</p>';
+
+      document.getElementById('q-claims').innerHTML = claims.length
+        ? claims.map(b => row(
+            'Claim request',
+            '<h3 style="margin:0">' + LL.escape(b.name) + '</h3><p class="small">User #' + b.owner_user_id + ' is claiming this listing.</p>',
+            '<button class="btn btn-field" onclick="action(\'business\',' + b.id + ',\'approve\',true)">Verify owner</button>' +
+            '<button class="btn btn-barn" onclick="action(\'business\',' + b.id + ',\'reject\',true)">Deny claim</button>'
+          )).join('')
+        : '<p class="dim">No claim requests.</p>';
+
+      document.getElementById('q-events').innerHTML = q.events.length
+        ? q.events.map(e => row(
+            LL.formatDate(e.starts_at) + (e.town ? ' · ' + e.town : ''),
+            '<h3 style="margin:0">' + LL.escape(e.title) + '</h3>' + (e.description ? '<p>' + LL.escape(e.description) + '</p>' : ''),
+            '<button class="btn btn-field" onclick="action(\'event\',' + e.id + ',\'approve\')">Approve</button>' +
+            '<button class="btn btn-barn" onclick="action(\'event\',' + e.id + ',\'reject\')">Reject</button>'
+          )).join('')
+        : '<p class="dim">Nothing pending.</p>';
+
+      document.getElementById('q-books').innerHTML = q.books.length
+        ? q.books.map(b => row(
+            (b.author || 'Unknown') + (b.year ? ' · ' + b.year : ''),
+            '<h3 style="margin:0">' + LL.escape(b.title) + '</h3>' + (b.description ? '<p>' + LL.escape(b.description) + '</p>' : '') + (b.why_we_read ? '<blockquote>' + LL.escape(b.why_we_read) + '</blockquote>' : ''),
+            '<button class="btn btn-field" onclick="action(\'book\',' + b.id + ',\'approve\')">Approve</button>' +
+            '<button class="btn btn-barn" onclick="action(\'book\',' + b.id + ',\'reject\')">Reject</button>'
+          )).join('')
+        : '<p class="dim">Nothing pending.</p>';
+
+      document.getElementById('q-aid-resources').innerHTML = q.aidResources.length
+        ? q.aidResources.map(r => row(
+            r.category + (r.town ? ' · ' + r.town : ''),
+            '<h3 style="margin:0">' + LL.escape(r.name) + '</h3>' + (r.description ? '<p>' + LL.escape(r.description) + '</p>' : ''),
+            '<button class="btn btn-field" onclick="action(\'aidResource\',' + r.id + ',\'approve\')">Approve</button>' +
+            '<button class="btn btn-barn" onclick="action(\'aidResource\',' + r.id + ',\'reject\')">Reject</button>'
+          )).join('')
+        : '<p class="dim">Nothing pending.</p>';
+
+      document.getElementById('q-aid-posts').innerHTML = q.aidPosts.length
+        ? q.aidPosts.map(p => row(
+            (p.kind === 'need' ? 'Need' : 'Offer') + (p.category ? ' · ' + p.category : '') + (p.town ? ' · ' + p.town : ''),
+            '<h3 style="margin:0">' + LL.escape(p.title) + '</h3><p>' + LL.escape(p.body) + '</p>' +
+              '<p class="small"><strong>Contact:</strong> ' + LL.escape(p.contact || '') + (p.contact_name ? ' (' + LL.escape(p.contact_name) + ')' : '') + '</p>',
+            '<button class="btn btn-field" onclick="action(\'aidPost\',' + p.id + ',\'approve\')">Approve</button>' +
+            '<button class="btn btn-barn" onclick="action(\'aidPost\',' + p.id + ',\'reject\')">Reject</button>'
+          )).join('')
+        : '<p class="dim">Nothing pending.</p>';
+    }
+    load();
+  </script>
+</body>
+</html>

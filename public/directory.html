@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Business Directory — Local Lee</title>
+  <meta name="description" content="A directory of locally owned businesses across Lee County, Illinois — farms, shops, trades, eateries, and more. Browse by category or town, or submit your own.">
+  <link rel="canonical" href="https://locallee.org/directory">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Business Directory — Local Lee">
+  <meta property="og:description" content="A directory of locally owned businesses across Lee County, Illinois — farms, shops, trades, eateries, and more. Browse by category or town, or submit your own.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/directory">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <h1>The Local Lee directory</h1>
+      <p>Locally owned businesses across Lee County. Know one we're missing? <a href="/submit/business">Add it.</a></p>
+    </div>
+
+    <form class="filters" id="filters" aria-label="Filter businesses">
+      <div class="form-row">
+        <label for="f-category">Category</label>
+        <select id="f-category" name="category"><option value="">All categories</option></select>
+      </div>
+      <div class="form-row">
+        <label for="f-town">Town</label>
+        <select id="f-town" name="town">
+          <option value="">All towns</option>
+          <option>Dixon</option><option>Amboy</option><option>Ashton</option>
+          <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
+          <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
+          <option>Harmon</option><option>Nelson</option><option>Steward</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="f-q">Search</label>
+        <input id="f-q" name="q" type="search" placeholder="name or keyword">
+      </div>
+      <button type="submit" class="btn">Filter</button>
+      <a class="btn btn-secondary" href="/submit/business">Add a business</a>
+    </form>
+
+    <div id="biz-list" class="card-grid" aria-busy="true"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    const params = new URLSearchParams(location.search);
+    document.getElementById('f-category').value = params.get('category') || '';
+    document.getElementById('f-town').value = params.get('town') || '';
+    document.getElementById('f-q').value = params.get('q') || '';
+
+    async function loadCategories() {
+      const { categories } = await LL.api('/api/categories');
+      const sel = document.getElementById('f-category');
+      const parents = categories.filter(c => !c.parent_id);
+      for (const p of parents) {
+        const opt = document.createElement('option');
+        opt.value = p.slug; opt.textContent = p.name;
+        sel.appendChild(opt);
+        const kids = categories.filter(c => c.parent_id === p.id);
+        for (const k of kids) {
+          const o = document.createElement('option');
+          o.value = k.slug; o.textContent = '   — ' + k.name;
+          sel.appendChild(o);
+        }
+      }
+      sel.value = params.get('category') || '';
+    }
+
+    async function loadBusinesses() {
+      const list = document.getElementById('biz-list');
+      list.setAttribute('aria-busy', 'true');
+      const q = new URLSearchParams();
+      const cat = document.getElementById('f-category').value;
+      const town = document.getElementById('f-town').value;
+      const search = document.getElementById('f-q').value.trim();
+      if (cat) q.set('category', cat);
+      if (town) q.set('town', town);
+      if (search) q.set('q', search);
+      try {
+        const { businesses } = await LL.api('/api/businesses?' + q.toString());
+        if (!businesses.length) {
+          list.innerHTML = '<p class="dim">No businesses match these filters yet.</p>';
+        } else {
+          list.innerHTML = businesses.map(b =>
+            `<article class="card">
+              <h3><a href="/directory/${LL.escape(b.slug)}">${LL.escape(b.name)}</a></h3>
+              <div class="meta">${b.category_name ? LL.escape(b.category_name) : ''}${b.town ? ' · ' + LL.escape(b.town) : ''}</div>
+              <p>${LL.escape((b.description || '').slice(0, 200))}${(b.description || '').length > 200 ? '…' : ''}</p>
+            </article>`).join('');
+        }
+      } catch (err) {
+        list.innerHTML = '<p class="dim">Couldn\'t load businesses.</p>';
+      }
+      list.setAttribute('aria-busy', 'false');
+    }
+
+    document.getElementById('filters').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const q = new URLSearchParams();
+      const cat = document.getElementById('f-category').value;
+      const town = document.getElementById('f-town').value;
+      const search = document.getElementById('f-q').value.trim();
+      if (cat) q.set('category', cat);
+      if (town) q.set('town', town);
+      if (search) q.set('q', search);
+      history.replaceState(null, '', '/directory' + (q.toString() ? '?' + q : ''));
+      loadBusinesses();
+    });
+
+    loadCategories().then(loadBusinesses);
+  </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Events — Local Lee</title>
+  <meta name="description" content="Upcoming community events in Lee County, Illinois — church suppers, farmers markets, school plays, work parties, and more. Anyone can submit.">
+  <link rel="canonical" href="https://locallee.org/events">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Events — Local Lee">
+  <meta property="og:description" content="Upcoming community events in Lee County, Illinois — church suppers, farmers markets, school plays, work parties, and more. Anyone can submit.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/events">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <h1>What's coming up</h1>
+      <p>Approved community events across the county. <a href="/submit/event">Post yours →</a></p>
+    </div>
+
+    <ul class="row-list" id="events" aria-busy="true">
+      <li class="dim">Loading…</li>
+    </ul>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    (async () => {
+      const list = document.getElementById('events');
+      try {
+        const { events } = await LL.api('/api/events');
+        if (!events.length) {
+          list.innerHTML = '<li class="dim">No events on the books yet — <a href="/submit/event">post the first one</a>.</li>';
+        } else {
+          list.innerHTML = events.map(e => `
+            <li>
+              <h3 style="margin:0"><a href="/events/${LL.escape(e.slug)}">${LL.escape(e.title)}</a></h3>
+              <div class="meta">${LL.escape(LL.formatDate(e.starts_at))}${e.town ? ' · ' + LL.escape(e.town) : ''}${e.location ? ' · ' + LL.escape(e.location) : ''} · <strong>${e.rsvp_count} going</strong></div>
+              ${e.description ? '<p>' + LL.escape(e.description.slice(0, 240)) + (e.description.length > 240 ? '…' : '') + '</p>' : ''}
+            </li>`).join('');
+        }
+      } catch (err) {
+        list.innerHTML = '<li class="dim">Couldn\'t load events.</li>';
+      }
+      list.setAttribute('aria-busy', 'false');
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+# Local Lee
+
+> Local Lee is a community website for Lee County, Illinois. It serves as a directory of locally owned businesses, a calendar of community events, a small reading list, and a mutual-aid board for needs and offers — all reviewed by an editor before publication.
+
+## What this site is
+
+Local Lee is a small, place-based site for the residents of Lee County, Illinois. The county seat is Dixon; the site also covers Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the surrounding rural areas.
+
+The site has four sections:
+
+- **Business directory** — a directory of locally owned businesses (farms, shops, trades, eateries, services, etc.), organized by category and town. Owners can claim their listing.
+- **Events calendar** — community events anyone can submit. An editor reviews each one.
+- **Literature** — a curated reading list of books on neighborhood, place, household life, and small-town economics, with a discussion area for each book.
+- **Mutual aid** — a directory of pantries, warming centers, and family-resource programs, plus a community board where neighbors post needs and offers. Posts are reviewed before they go live and automatically expire after 30 days.
+
+## What this site is not
+
+Local Lee is not a social network, not a national platform, and not a feed. It does not host private messaging. It is intentionally small and slow. There is no advertising.
+
+## Tone and stance
+
+Local Lee is rooted in communitarian, agrarian, distributist, and localist traditions, but does not require visitors to share any particular philosophy. The site is welcoming to neighbors of any background who value place, locally owned enterprise, and mutual support.
+
+## Key pages
+
+- Home: https://locallee.org/
+- About: https://locallee.org/about
+- Contact: https://locallee.org/contact (contact@locallee.org)
+- Directory: https://locallee.org/directory
+- Events: https://locallee.org/events
+- Literature: https://locallee.org/literature
+- Mutual aid: https://locallee.org/mutual-aid
+
+## Submission
+
+All user submissions (businesses, events, books, mutual-aid resources, mutual-aid posts) are reviewed by an editor before becoming publicly visible.
+
+## Contact
+
+contact@locallee.org
