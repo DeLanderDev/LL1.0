@@ -989,12 +989,24 @@ app.get('/api/admin/queue', requireAdmin, (req, res) => {
   res.json({ businesses, events, books, aidResources, aidPosts });
 });
 
+// Types reachable via the generic /api/admin/:type/:id/{approve,reject,delete}
+// dispatcher. Approve/reject only make sense for the first five, but
+// delete works for everything that has a numeric primary key.
 const APPROVABLE = {
   business: 'businesses',
   event: 'events',
   book: 'books',
   aidResource: 'aid_resources',
   aidPost: 'aid_posts',
+};
+const DELETABLE = {
+  ...APPROVABLE,
+  thread: 'threads',
+  reply: 'thread_replies',
+  newsletter: 'newsletters',
+  topic: 'topic_suggestions',
+  'book-comment': 'book_comments',
+  'newsletter-comment': 'newsletter_comments',
 };
 
 app.post('/api/admin/:type/:id/approve', requireAdmin, (req, res) => {
@@ -1030,20 +1042,13 @@ app.post('/api/admin/business/:id/claim/reject', requireAdmin, (req, res) => {
 });
 
 // Admin delete: hard-removes a row regardless of status. Cascades follow
-// the FK definitions (event RSVPs, book comments, etc.).
+// the FK definitions (event RSVPs, book comments, thread replies, etc.).
 app.post('/api/admin/:type/:id/delete', requireAdmin, (req, res) => {
-  const table = APPROVABLE[req.params.type];
-  if (!table) return res.status(400).json({ error: 'Unknown type.' });
+  const table = DELETABLE[req.params.type];
+  if (!table) return res.status(400).json({ error: 'Unknown type: ' + req.params.type });
   const id = parseInt(req.params.id, 10);
   const info = db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
   if (info.changes === 0) return res.status(404).json({ error: 'Not found.' });
-  res.json({ ok: true });
-});
-
-// Delete a single book comment.
-app.post('/api/admin/book-comment/:id/delete', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  db.prepare('DELETE FROM book_comments WHERE id = ?').run(id);
   res.json({ ok: true });
 });
 
@@ -1310,23 +1315,9 @@ app.post('/api/admin/newsletter/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/admin/newsletter/:id/delete', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  db.prepare('DELETE FROM newsletters WHERE id = ?').run(id);
-  res.json({ ok: true });
-});
-
-app.post('/api/admin/topic/:id/delete', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  db.prepare('DELETE FROM topic_suggestions WHERE id = ?').run(id);
-  res.json({ ok: true });
-});
-
-app.post('/api/admin/newsletter-comment/:id/delete', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  db.prepare('DELETE FROM newsletter_comments WHERE id = ?').run(id);
-  res.json({ ok: true });
-});
+// (delete endpoints for newsletter, topic, newsletter-comment, thread,
+// and reply are handled by the generic /api/admin/:type/:id/delete
+// dispatcher above, with type names mapped via DELETABLE.)
 
 // ----- Discussion threads -----
 app.get('/api/threads', (req, res) => {
@@ -1398,17 +1389,7 @@ app.post('/api/admin/thread/:id/lock', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-app.post('/api/admin/thread/:id/delete', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  db.prepare('DELETE FROM threads WHERE id = ?').run(id);
-  res.json({ ok: true });
-});
-
-app.post('/api/admin/reply/:id/delete', requireAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  db.prepare('DELETE FROM thread_replies WHERE id = ?').run(id);
-  res.json({ ok: true });
-});
+// (delete handled by the generic dispatcher; see DELETABLE map.)
 
 // ----- Donation settings -----
 app.get('/api/donation', (req, res) => {
