@@ -8,6 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "altcha-lib": "^1.4.1",
     "bcrypt": "^5.1.1",
     "better-sqlite3": "^11.3.0",
     "connect-sqlite3": "^0.9.15",

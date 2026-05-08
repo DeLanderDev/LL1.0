@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discussion - Local Lee</title>
+  <meta name="description" content="A community discussion thread on Local Lee.">
+  <link rel="canonical" href="https://locallee.org/discussion">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Discussion - Local Lee">
+  <meta property="og:description" content="A community discussion thread on Local Lee.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/discussion">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  <script src="/js/altcha.min.js" defer></script>
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <img class="brand-mark" src="/brand-mark" alt="" width="44" height="44">
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/newsletter">Newsletter</a>
+        <a href="/discussion">Discussion</a>
+        <a href="/donate">Donate</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <article id="thread" aria-busy="true"><p class="dim">Loading...</p></article>
+    <section id="replies-section" hidden>
+      <h2>Replies</h2>
+      <ul class="row-list" id="replies"></ul>
+      <form id="reply-form" class="card" hidden>
+        <div class="form-row"><label for="r-body">Reply</label><textarea id="r-body" name="body" rows="4" maxlength="8000" required></textarea></div>
+        <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+        <button type="submit" class="btn">Post reply</button>
+        <div id="r-notice" class="notice small" hidden></div>
+      </form>
+      <p id="reply-signin" class="dim" hidden><a href="/login">Sign in</a> to reply.</p>
+      <p id="reply-locked" class="dim" hidden>This thread is locked.</p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois - Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/newsletter">Newsletter</a></li>
+          <li><a href="/discussion">Discussion</a></li>
+          <li><a href="/donate">Donate</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+          <li><a href="/newsletter/suggest">Suggest a newsletter topic</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee - Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    const slug = location.pathname.split('/').filter(Boolean).pop();
+    const root = document.getElementById('thread');
+    let thread = null;
+
+    function renderReplies(replies) {
+      const ul = document.getElementById('replies');
+      if (!replies.length) { ul.innerHTML = '<li class="dim">No replies yet.</li>'; return; }
+      ul.innerHTML = replies.map(r => `
+        <li class="comment-row">
+          ${LL.avatar(r, 40)}
+          <div>
+            <div class="meta"><strong>${LL.userLabel(r)}</strong> &middot; ${LL.escape(LL.formatDate(r.created_at))}</div>
+            <p>${LL.escape(r.body)}</p>
+          </div>
+        </li>`).join('');
+    }
+
+    async function load() {
+      try {
+        const data = await LL.api('/api/threads/' + encodeURIComponent(slug));
+        thread = data.thread;
+        document.title = thread.title + ' - Local Lee';
+        root.innerHTML = `
+          <div class="page-head">
+            <p class="small dim"><a href="/discussion">&larr; All threads</a></p>
+            <h1>${LL.escape(thread.title)}${thread.locked ? ' <span class="tag">Locked</span>' : ''}</h1>
+          </div>
+          <div class="comment-row" style="margin-bottom:1em">
+            ${LL.avatar(thread, 48)}
+            <div>
+              <div class="meta">${LL.userLabel(thread)} &middot; ${LL.escape(LL.formatDate(thread.created_at))}</div>
+              <p>${LL.escape(thread.body)}</p>
+            </div>
+          </div>
+        `;
+        renderReplies(data.replies);
+        document.getElementById('replies-section').hidden = false;
+        const me = (await LL.api('/api/me')).user;
+        if (thread.locked) {
+          document.getElementById('reply-locked').hidden = false;
+        } else if (me) {
+          document.getElementById('reply-form').hidden = false;
+        } else {
+          document.getElementById('reply-signin').hidden = false;
+        }
+        root.setAttribute('aria-busy', 'false');
+      } catch (err) {
+        root.innerHTML = '<p class="dim">Thread not found. <a href="/discussion">Back to discussion.</a></p>';
+      }
+    }
+
+    document.getElementById('reply-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      try {
+        await LL.api('/api/threads/' + thread.id + '/replies', { method: 'POST', body });
+        document.getElementById('r-body').value = '';
+        const data = await LL.api('/api/threads/' + encodeURIComponent(slug));
+        renderReplies(data.replies);
+        LL.notice('#r-notice', 'Posted.', 'success');
+      } catch (err) { LL.notice('#r-notice', err.message, 'error'); }
+    });
+
+    load();
+  </script>
+</body>
+</html>

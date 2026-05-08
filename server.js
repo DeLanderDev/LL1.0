@@ -8,6 +8,7 @@ const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcrypt');
 const Database = require('better-sqlite3');
+const altcha = require('altcha-lib');
 
 // ----- Configuration -----
 const PORT = process.env.PORT || 8082;
@@ -145,13 +146,78 @@ CREATE TABLE IF NOT EXISTS aid_posts (
   created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
+CREATE TABLE IF NOT EXISTS newsletters (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  body TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  author_id INTEGER REFERENCES users(id),
+  published_at INTEGER,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS newsletter_comments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  newsletter_id INTEGER NOT NULL REFERENCES newsletters(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS topic_suggestions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  body TEXT NOT NULL,
+  contact TEXT,
+  contact_name TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS threads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  body TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  locked INTEGER NOT NULL DEFAULT 0,
+  last_activity_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS thread_replies (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  thread_id INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_business_status ON businesses(status);
 CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
 CREATE INDEX IF NOT EXISTS idx_books_status ON books(status);
 CREATE INDEX IF NOT EXISTS idx_aid_resources_status ON aid_resources(status);
 CREATE INDEX IF NOT EXISTS idx_aid_posts_status ON aid_posts(status);
 CREATE INDEX IF NOT EXISTS idx_aid_posts_expires ON aid_posts(expires_at);
+CREATE INDEX IF NOT EXISTS idx_newsletters_status ON newsletters(status);
+CREATE INDEX IF NOT EXISTS idx_threads_activity ON threads(last_activity_at DESC);
 `);
+
+// Lazily add columns introduced after the original schema. Safe across
+// re-runs because each ALTER TABLE is wrapped in a try/catch.
+function addColumnIfMissing(table, col, def) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === col)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  }
+}
+addColumnIfMissing('users', 'avatar_ext', 'TEXT');
+addColumnIfMissing('users', 'bio', 'TEXT');
 
 // ----- Seed admin + categories + a little curated content -----
 function seed() {
@@ -390,8 +456,70 @@ function expireAidPosts() {
 setInterval(expireAidPosts, 1000 * 60 * 60).unref();
 expireAidPosts();
 
+// ----- AltCha (proof-of-work bot challenge) -----
+const ALTCHA_HMAC =
+  process.env.ALTCHA_HMAC || crypto.randomBytes(32).toString('hex');
+
+async function makeAltchaChallenge() {
+  return altcha.createChallenge({
+    hmacKey: ALTCHA_HMAC,
+    maxNumber: 200000,
+    expires: new Date(Date.now() + 10 * 60 * 1000),
+  });
+}
+
+// Routes that mutate via public POSTs run through this. Signed-in admins
+// skip the check (less friction for moderation actions); everyone else
+// must include a solved AltCha payload in `req.body.altcha`.
+async function requireAltcha(req, res, next) {
+  if (req.session && req.session.role === 'admin') return next();
+  const payload = req.body && req.body.altcha;
+  if (!payload)
+    return res
+      .status(400)
+      .json({ error: 'Please complete the verification widget.' });
+  try {
+    const ok = await altcha.verifySolution(payload, ALTCHA_HMAC);
+    if (!ok)
+      return res
+        .status(400)
+        .json({ error: 'Verification failed. Please reload and try again.' });
+  } catch (_) {
+    return res.status(400).json({ error: 'Verification failed.' });
+  }
+  next();
+}
+
+// ----- Settings (key/value store for donation page, etc.) -----
+function getSetting(key, fallback) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  if (!row) return fallback;
+  try {
+    return JSON.parse(row.value);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function setSetting(key, value) {
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).run(key, JSON.stringify(value));
+}
+
+const DEFAULT_DONATION = {
+  goal_cents: 50000,
+  raised_cents: 0,
+  currency: 'USD',
+  url: '',
+  url_label: 'Donate',
+  message:
+    'Local Lee runs on a small budget. Hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is doing the moderating - any of it that visitors care to chip in toward keeps the lights on.',
+};
+
 // ----- Auth API -----
-app.post('/api/register', (req, res) => {
+app.post('/api/register', requireAltcha, (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
   const display = trim(req.body.display_name, 80);
@@ -491,14 +619,19 @@ app.get('/api/businesses/:slug', (req, res) => {
   res.json({ business: row });
 });
 
-app.post('/api/businesses', (req, res) => {
+app.post('/api/businesses', requireAltcha, (req, res) => {
   const name = trim(req.body.name, 120);
+  const town = trim(req.body.town, 80);
   if (!name) return res.status(400).json({ error: 'Business name required.' });
+  if (!town)
+    return res
+      .status(400)
+      .json({ error: 'Please pick the Lee County town this business is in.' });
   const fields = {
     name,
     description: trim(req.body.description, 4000),
     category_id: parseInt(req.body.category_id, 10) || null,
-    town: trim(req.body.town, 80),
+    town,
     address: trim(req.body.address, 200),
     phone: trim(req.body.phone, 40),
     email: trim(req.body.email, 200),
@@ -517,7 +650,7 @@ app.post('/api/businesses', (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-app.post('/api/businesses/:id/claim', requireAuth, (req, res) => {
+app.post('/api/businesses/:id/claim', requireAuth, requireAltcha, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const biz = db.prepare('SELECT id, claim_status FROM businesses WHERE id = ?').get(id);
   if (!biz) return res.status(404).json({ error: 'Not found.' });
@@ -557,7 +690,7 @@ app.get('/api/events/:slug', (req, res) => {
   res.json({ event: e, rsvped });
 });
 
-app.post('/api/events', (req, res) => {
+app.post('/api/events', requireAltcha, (req, res) => {
   const title = trim(req.body.title, 160);
   const startsAt = parseInt(req.body.starts_at, 10);
   if (!title) return res.status(400).json({ error: 'Title required.' });
@@ -639,7 +772,7 @@ app.get('/api/books/:slug', (req, res) => {
   res.json({ book: b, comments });
 });
 
-app.post('/api/books', (req, res) => {
+app.post('/api/books', requireAltcha, (req, res) => {
   const title = trim(req.body.title, 200);
   if (!title) return res.status(400).json({ error: 'Title required.' });
   const slug = uniqueSlug('books', slugify(title));
@@ -661,7 +794,7 @@ app.post('/api/books', (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-app.post('/api/books/:id/comments', requireAuth, (req, res) => {
+app.post('/api/books/:id/comments', requireAuth, requireAltcha, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const body = trim(req.body.body, 4000);
   if (!body) return res.status(400).json({ error: 'Comment cannot be empty.' });
@@ -686,7 +819,7 @@ app.get('/api/aid/resources', (req, res) => {
   res.json({ resources: db.prepare(sql).all(...params) });
 });
 
-app.post('/api/aid/resources', (req, res) => {
+app.post('/api/aid/resources', requireAltcha, (req, res) => {
   const name = trim(req.body.name, 160);
   const category = trim(req.body.category, 80);
   if (!name) return res.status(400).json({ error: 'Name required.' });
@@ -739,7 +872,7 @@ app.get('/api/aid/posts/:id', (req, res) => {
   res.json({ post: row });
 });
 
-app.post('/api/aid/posts', (req, res) => {
+app.post('/api/aid/posts', requireAltcha, (req, res) => {
   const kind = req.body.kind === 'need' ? 'need' : req.body.kind === 'offer' ? 'offer' : null;
   if (!kind) return res.status(400).json({ error: 'kind must be need or offer.' });
   const title = trim(req.body.title, 160);
@@ -771,7 +904,7 @@ app.post('/api/aid/posts', (req, res) => {
 });
 
 // ----- Contact -----
-app.post('/api/contact', (req, res) => {
+app.post('/api/contact', requireAltcha, (req, res) => {
   const name = trim(req.body.name, 120);
   const email = trim(req.body.email, 254);
   const message = trim(req.body.message, 4000);
@@ -1003,6 +1136,361 @@ app.post('/api/admin/logo/reset', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ----- AltCha challenge endpoint -----
+app.get('/api/altcha/challenge', async (req, res) => {
+  try {
+    const challenge = await makeAltchaChallenge();
+    res.set('Cache-Control', 'no-store');
+    res.json(challenge);
+  } catch (err) {
+    res.status(500).json({ error: 'Could not create challenge.' });
+  }
+});
+
+// ----- Newsletter -----
+app.get('/api/newsletter', (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT n.id, n.title, n.slug, n.published_at, n.created_at,
+              substr(n.body, 1, 280) AS excerpt,
+              u.display_name AS author_name
+       FROM newsletters n LEFT JOIN users u ON u.id = n.author_id
+       WHERE n.status = 'published'
+       ORDER BY n.published_at DESC, n.created_at DESC`
+    )
+    .all();
+  res.json({ posts: rows });
+});
+
+app.get('/api/newsletter/:slug', (req, res) => {
+  const post = db
+    .prepare(
+      `SELECT n.*, u.display_name AS author_name
+       FROM newsletters n LEFT JOIN users u ON u.id = n.author_id
+       WHERE n.slug = ? AND n.status = 'published'`
+    )
+    .get(req.params.slug);
+  if (!post) return res.status(404).json({ error: 'Not found.' });
+  const comments = db
+    .prepare(
+      `SELECT c.id, c.body, c.created_at, u.id AS user_id,
+              u.display_name, u.email, u.avatar_ext
+       FROM newsletter_comments c JOIN users u ON u.id = c.user_id
+       WHERE c.newsletter_id = ? ORDER BY c.created_at ASC`
+    )
+    .all(post.id);
+  res.json({ post, comments });
+});
+
+app.post('/api/newsletter/:id/comments', requireAuth, requireAltcha, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const body = trim(req.body.body, 4000);
+  if (!body) return res.status(400).json({ error: 'Comment cannot be empty.' });
+  const ok = db.prepare("SELECT 1 FROM newsletters WHERE id = ? AND status='published'").get(id);
+  if (!ok) return res.status(404).json({ error: 'Not found.' });
+  db.prepare(
+    'INSERT INTO newsletter_comments (newsletter_id, user_id, body) VALUES (?, ?, ?)'
+  ).run(id, req.session.userId, body);
+  res.json({ ok: true });
+});
+
+app.post('/api/newsletter/topics', requireAltcha, (req, res) => {
+  const body = trim(req.body.body, 2000);
+  if (!body) return res.status(400).json({ error: 'Tell us what you would like to read about.' });
+  db.prepare(
+    'INSERT INTO topic_suggestions (body, contact, contact_name) VALUES (?, ?, ?)'
+  ).run(
+    body,
+    trim(req.body.contact, 200),
+    trim(req.body.contact_name, 80)
+  );
+  res.json({ ok: true });
+});
+
+// Newsletter (admin)
+app.get('/api/admin/newsletter', requireAdmin, (req, res) => {
+  const posts = db
+    .prepare('SELECT * FROM newsletters ORDER BY created_at DESC')
+    .all();
+  const topics = db
+    .prepare('SELECT * FROM topic_suggestions ORDER BY created_at DESC')
+    .all();
+  res.json({ posts, topics });
+});
+
+app.post('/api/admin/newsletter', requireAdmin, (req, res) => {
+  const title = trim(req.body.title, 200);
+  const body = trim(req.body.body, 50000);
+  if (!title) return res.status(400).json({ error: 'Title required.' });
+  if (!body) return res.status(400).json({ error: 'Body required.' });
+  const slug = uniqueSlug('newsletters', slugify(title));
+  const status = req.body.publish ? 'published' : 'draft';
+  const publishedAt = status === 'published' ? Math.floor(Date.now() / 1000) : null;
+  const info = db
+    .prepare(
+      `INSERT INTO newsletters (title, slug, body, status, author_id, published_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .run(title, slug, body, status, req.session.userId, publishedAt);
+  res.json({ ok: true, id: info.lastInsertRowid, slug });
+});
+
+app.post('/api/admin/newsletter/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const existing = db.prepare('SELECT * FROM newsletters WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Not found.' });
+  const title = trim(req.body.title, 200) || existing.title;
+  const body = trim(req.body.body, 50000) || existing.body;
+  let status = existing.status;
+  let publishedAt = existing.published_at;
+  if (req.body.publish === true) {
+    status = 'published';
+    if (!publishedAt) publishedAt = Math.floor(Date.now() / 1000);
+  } else if (req.body.publish === false) {
+    status = 'draft';
+  }
+  db.prepare(
+    `UPDATE newsletters SET title = ?, body = ?, status = ?, published_at = ? WHERE id = ?`
+  ).run(title, body, status, publishedAt, id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/newsletter/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM newsletters WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/topic/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM topic_suggestions WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/newsletter-comment/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM newsletter_comments WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+// ----- Discussion threads -----
+app.get('/api/threads', (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT t.id, t.title, t.slug, t.locked, t.last_activity_at, t.created_at,
+              u.id AS user_id, u.display_name, u.email, u.avatar_ext,
+              (SELECT COUNT(*) FROM thread_replies r WHERE r.thread_id = t.id) AS reply_count
+       FROM threads t LEFT JOIN users u ON u.id = t.user_id
+       ORDER BY t.last_activity_at DESC LIMIT 200`
+    )
+    .all();
+  res.json({ threads: rows });
+});
+
+app.get('/api/threads/:slug', (req, res) => {
+  const thread = db
+    .prepare(
+      `SELECT t.*, u.display_name, u.email, u.avatar_ext
+       FROM threads t LEFT JOIN users u ON u.id = t.user_id
+       WHERE t.slug = ?`
+    )
+    .get(req.params.slug);
+  if (!thread) return res.status(404).json({ error: 'Not found.' });
+  const replies = db
+    .prepare(
+      `SELECT r.id, r.body, r.created_at, u.id AS user_id,
+              u.display_name, u.email, u.avatar_ext
+       FROM thread_replies r JOIN users u ON u.id = r.user_id
+       WHERE r.thread_id = ? ORDER BY r.created_at ASC`
+    )
+    .all(thread.id);
+  res.json({ thread, replies });
+});
+
+app.post('/api/threads', requireAuth, requireAltcha, (req, res) => {
+  const title = trim(req.body.title, 200);
+  const body = trim(req.body.body, 8000);
+  if (!title || !body)
+    return res.status(400).json({ error: 'Title and body required.' });
+  const slug = uniqueSlug('threads', slugify(title));
+  const info = db
+    .prepare(
+      'INSERT INTO threads (title, slug, body, user_id) VALUES (?, ?, ?, ?)'
+    )
+    .run(title, slug, body, req.session.userId);
+  res.json({ ok: true, id: info.lastInsertRowid, slug });
+});
+
+app.post('/api/threads/:id/replies', requireAuth, requireAltcha, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const body = trim(req.body.body, 8000);
+  if (!body) return res.status(400).json({ error: 'Reply cannot be empty.' });
+  const t = db.prepare('SELECT id, locked FROM threads WHERE id = ?').get(id);
+  if (!t) return res.status(404).json({ error: 'Not found.' });
+  if (t.locked) return res.status(403).json({ error: 'This thread is locked.' });
+  const now = Math.floor(Date.now() / 1000);
+  db.prepare(
+    'INSERT INTO thread_replies (thread_id, user_id, body) VALUES (?, ?, ?)'
+  ).run(id, req.session.userId, body);
+  db.prepare('UPDATE threads SET last_activity_at = ? WHERE id = ?').run(now, id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/thread/:id/lock', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const locked = req.body.locked ? 1 : 0;
+  db.prepare('UPDATE threads SET locked = ? WHERE id = ?').run(locked, id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/thread/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM threads WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/reply/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM thread_replies WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+// ----- Donation settings -----
+app.get('/api/donation', (req, res) => {
+  const data = getSetting('donation', DEFAULT_DONATION);
+  res.json({ donation: { ...DEFAULT_DONATION, ...data } });
+});
+
+app.post('/api/admin/donation', requireAdmin, (req, res) => {
+  const current = { ...DEFAULT_DONATION, ...getSetting('donation', DEFAULT_DONATION) };
+  const next = {
+    goal_cents: Math.max(0, parseInt(req.body.goal_cents, 10) || current.goal_cents),
+    raised_cents:
+      req.body.raised_cents === '' || typeof req.body.raised_cents === 'undefined'
+        ? current.raised_cents
+        : Math.max(0, parseInt(req.body.raised_cents, 10) || 0),
+    currency: trim(req.body.currency, 8) || current.currency,
+    url: trim(req.body.url, 400),
+    url_label: trim(req.body.url_label, 60) || 'Donate',
+    message: trim(req.body.message, 4000) || current.message,
+  };
+  setSetting('donation', next);
+  res.json({ ok: true, donation: next });
+});
+
+// ----- Profile + avatar -----
+const AVATAR_DIR = path.join(DATA_DIR, 'avatars');
+if (!fs.existsSync(AVATAR_DIR)) fs.mkdirSync(AVATAR_DIR, { recursive: true });
+
+const ALLOWED_AVATAR_MIMES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+};
+
+const MONOGRAM_PALETTE = [
+  '#5d6f3a', '#5a3a1b', '#8b3a2a', '#c89c4d',
+  '#3f4f25', '#6b5c3f', '#a8b9b1', '#3e2810',
+];
+
+function monogramFor(user) {
+  const name = (user.display_name || user.email || 'L').trim();
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0])
+      .join('')
+      .toUpperCase() || 'L';
+  const hash = crypto.createHash('md5').update(name).digest();
+  const bg = MONOGRAM_PALETTE[hash[0] % MONOGRAM_PALETTE.length];
+  const safe = initials.replace(/[<>"'&]/g, '');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="${safe}">
+  <rect width="64" height="64" rx="32" fill="${bg}"/>
+  <text x="32" y="40" text-anchor="middle" font-family="Georgia,serif" font-size="26" fill="#fbf6e8" font-weight="600">${safe}</text>
+</svg>
+`;
+}
+
+app.get('/avatar/:userId', (req, res) => {
+  const id = parseInt(req.params.userId, 10);
+  const user = db
+    .prepare('SELECT id, email, display_name, avatar_ext FROM users WHERE id = ?')
+    .get(id);
+  if (!user) {
+    res.set('Cache-Control', 'public, max-age=60');
+    res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+    return res.send(monogramFor({ display_name: 'L' }));
+  }
+  if (user.avatar_ext) {
+    const file = path.join(AVATAR_DIR, `${user.id}.${user.avatar_ext}`);
+    if (fs.existsSync(file)) {
+      const mime =
+        user.avatar_ext === 'png' ? 'image/png' :
+        user.avatar_ext === 'jpg' ? 'image/jpeg' : 'image/webp';
+      res.set('Cache-Control', 'public, max-age=300');
+      res.set('Content-Type', mime);
+      return fs.createReadStream(file).pipe(res);
+    }
+  }
+  res.set('Cache-Control', 'public, max-age=600');
+  res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.send(monogramFor(user));
+});
+
+app.get('/api/me/profile', requireAuth, (req, res) => {
+  const u = db
+    .prepare('SELECT id, email, display_name, bio, avatar_ext, role FROM users WHERE id = ?')
+    .get(req.session.userId);
+  res.json({ user: u });
+});
+
+app.post('/api/me/profile', requireAuth, (req, res) => {
+  const display = trim(req.body.display_name, 80);
+  const bio = trim(req.body.bio, 400);
+  db.prepare('UPDATE users SET display_name = ?, bio = ? WHERE id = ?').run(
+    display || null,
+    bio || null,
+    req.session.userId
+  );
+  res.json({ ok: true });
+});
+
+app.post('/api/me/avatar', requireAuth, (req, res) => {
+  const dataUrl = req.body && req.body.data;
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:'))
+    return res.status(400).json({ error: 'Send a base64 data URL in `data`.' });
+  const m = dataUrl.match(/^data:([\w/+\-.]+);base64,(.+)$/);
+  if (!m) return res.status(400).json({ error: 'Malformed data URL.' });
+  const mime = m[1].toLowerCase();
+  const ext = ALLOWED_AVATAR_MIMES[mime];
+  if (!ext) return res.status(400).json({ error: 'Use PNG, JPEG, or WebP.' });
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 256 * 1024)
+    return res.status(413).json({ error: 'Avatar must be 256 KB or smaller.' });
+  for (const e of new Set(Object.values(ALLOWED_AVATAR_MIMES))) {
+    try { fs.unlinkSync(path.join(AVATAR_DIR, `${req.session.userId}.${e}`)); } catch (_) {}
+  }
+  fs.writeFileSync(path.join(AVATAR_DIR, `${req.session.userId}.${ext}`), buf);
+  db.prepare('UPDATE users SET avatar_ext = ? WHERE id = ?').run(
+    ext,
+    req.session.userId
+  );
+  res.json({ ok: true });
+});
+
+app.post('/api/me/avatar/reset', requireAuth, (req, res) => {
+  for (const e of new Set(Object.values(ALLOWED_AVATAR_MIMES))) {
+    try { fs.unlinkSync(path.join(AVATAR_DIR, `${req.session.userId}.${e}`)); } catch (_) {}
+  }
+  db.prepare('UPDATE users SET avatar_ext = NULL WHERE id = ?').run(
+    req.session.userId
+  );
+  res.json({ ok: true });
+});
+
 // ----- Sitemap & robots & llms.txt (dynamic with current content) -----
 app.get('/sitemap.xml', (req, res) => {
   const urls = [
@@ -1012,6 +1500,9 @@ app.get('/sitemap.xml', (req, res) => {
     ...db.prepare("SELECT slug FROM businesses WHERE status='approved'").all().map(r => `/directory/${r.slug}`),
     ...db.prepare("SELECT slug FROM events WHERE status='approved'").all().map(r => `/events/${r.slug}`),
     ...db.prepare("SELECT slug FROM books WHERE status='approved'").all().map(r => `/literature/${r.slug}`),
+    ...db.prepare("SELECT slug FROM newsletters WHERE status='published'").all().map(r => `/newsletter/${r.slug}`),
+    ...db.prepare('SELECT slug FROM threads').all().map(r => `/discussion/${r.slug}`),
+    '/newsletter', '/discussion', '/donate',
   ];
   const all = urls.concat(rows);
   const xml =
@@ -1044,6 +1535,12 @@ const pages = {
   '/submit/book': 'submit-book.html',
   '/submit/aid-resource': 'submit-aid-resource.html',
   '/submit/aid-post': 'submit-aid-post.html',
+  '/newsletter': 'newsletter.html',
+  '/newsletter/suggest': 'newsletter-suggest.html',
+  '/discussion': 'discussion.html',
+  '/discussion/new': 'discussion-new.html',
+  '/donate': 'donate.html',
+  '/profile': 'profile.html',
 };
 for (const [route, file] of Object.entries(pages)) {
   app.get(route, (req, res) => res.sendFile(path.join(__dirname, 'public', file)));
@@ -1057,6 +1554,12 @@ app.get('/events/:slug', (req, res) =>
 );
 app.get('/literature/:slug', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'book.html'))
+);
+app.get('/newsletter/:slug', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'newsletter-post.html'))
+);
+app.get('/discussion/:slug', (req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'thread.html'))
 );
 app.get('/mutual-aid/post/:id', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'aid-post.html'))

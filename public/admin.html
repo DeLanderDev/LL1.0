@@ -13,6 +13,7 @@
   <meta property="og:url" content="https://locallee.org/admin">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
+  
   <meta name="robots" content="noindex">
 </head>
 <body>
@@ -29,6 +30,9 @@
         <a href="/events">Events</a>
         <a href="/literature">Literature</a>
         <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/newsletter">Newsletter</a>
+        <a href="/discussion">Discussion</a>
+        <a href="/donate">Donate</a>
         <a href="/contact">Contact</a>
       </nav>
       <div class="nav-account" id="nav-account" aria-live="polite"></div>
@@ -47,6 +51,9 @@
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" aria-selected="true" data-which="queue">Pending queue</button>
         <button class="tab" role="tab" aria-selected="false" data-which="manage">Manage</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="newsletter">Newsletter</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="discussion">Discussion</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="donation">Donations</button>
         <button class="tab" role="tab" aria-selected="false" data-which="logo">Logo</button>
       </div>
 
@@ -67,6 +74,48 @@
         <section><h2>Book comments</h2><div id="m-comments"></div></section>
         <section><h2>Mutual aid: resources</h2><div id="m-aid-resources"></div></section>
         <section><h2>Mutual aid: needs &amp; offers</h2><div id="m-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-newsletter" class="panel" hidden>
+        <h2>Author a newsletter post</h2>
+        <form id="nl-form" class="card" novalidate>
+          <input type="hidden" id="nl-id" value="">
+          <div class="form-row"><label for="nl-title">Title</label><input id="nl-title" type="text" maxlength="200" required></div>
+          <div class="form-row"><label for="nl-body">Body</label><textarea id="nl-body" rows="14" maxlength="50000" required></textarea><p class="hint">Plain text. Blank lines start a new paragraph.</p></div>
+          <button type="submit" class="btn">Save draft</button>
+          <button type="button" class="btn btn-field" id="nl-publish">Save &amp; publish</button>
+          <button type="button" class="btn btn-secondary" id="nl-clear">New post</button>
+          <div id="nl-msg" class="notice small" hidden></div>
+        </form>
+
+        <h3>Existing posts</h3>
+        <div id="nl-list"></div>
+
+        <h3>Topic suggestions from neighbors</h3>
+        <div id="nl-topics"></div>
+      </div>
+
+      <div id="panel-discussion" class="panel" hidden>
+        <h2>Threads</h2>
+        <p class="dim small">Lock a thread to stop new replies; delete to remove the whole thread (and its replies).</p>
+        <div id="d-threads"></div>
+      </div>
+
+      <div id="panel-donation" class="panel" hidden>
+        <h2>Donation page settings</h2>
+        <p class="dim small">Numbers entered as whole dollars are converted to cents.</p>
+        <form id="don-form" class="card" novalidate>
+          <div class="form-grid">
+            <div class="form-row"><label for="don-goal">Goal (whole dollars)</label><input id="don-goal" type="number" min="0" step="1"></div>
+            <div class="form-row"><label for="don-raised">Raised so far (whole dollars)</label><input id="don-raised" type="number" min="0" step="1"></div>
+            <div class="form-row"><label for="don-currency">Currency</label><input id="don-currency" type="text" maxlength="8" placeholder="USD"></div>
+            <div class="form-row"><label for="don-url-label">Button label</label><input id="don-url-label" type="text" maxlength="60" placeholder="Donate"></div>
+          </div>
+          <div class="form-row"><label for="don-url">External donate URL <span class="dim small">(GoFundMe, Donorbox, Stripe, etc.)</span></label><input id="don-url" type="url" maxlength="400"></div>
+          <div class="form-row"><label for="don-msg">Message shown above the progress bar</label><textarea id="don-msg" rows="6" maxlength="4000"></textarea></div>
+          <button type="submit" class="btn">Save</button>
+          <div id="don-status" class="notice small" hidden></div>
+        </form>
       </div>
 
       <div id="panel-logo" class="panel" hidden>
@@ -102,6 +151,9 @@
           <li><a href="/events">Events</a></li>
           <li><a href="/literature">Literature</a></li>
           <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/newsletter">Newsletter</a></li>
+          <li><a href="/discussion">Discussion</a></li>
+          <li><a href="/donate">Donate</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
       </div>
@@ -112,6 +164,7 @@
           <li><a href="/submit/event">Post an event</a></li>
           <li><a href="/submit/book">Suggest a book</a></li>
           <li><a href="/submit/aid-post">Post a need or offer</a></li>
+          <li><a href="/newsletter/suggest">Suggest a newsletter topic</a></li>
         </ul>
       </div>
     </div>
@@ -287,7 +340,136 @@
             delBtn('aidPost', p.id, p.title)
           )).join('')
         : '<p class="dim">No posts.</p>';
+
+      await loadNewsletter();
+      await loadDiscussion();
+      await loadDonation();
     }
+
+    // ---- newsletter ----
+    async function loadNewsletter() {
+      const data = await LL.api('/api/admin/newsletter');
+      const list = document.getElementById('nl-list');
+      list.innerHTML = data.posts.length
+        ? data.posts.map(p => row(
+            (p.status === 'published' ? '<span class="tag" style="background:#d9e1c2;border-color:#a8b88a">Published</span>' : '<span class="tag">Draft</span>') + ' · ' + LL.escape(LL.formatDate(p.created_at)),
+            '<h3 style="margin:0">' + LL.escape(p.title) + '</h3><p>' + LL.escape((p.body || '').slice(0, 200)) + ((p.body || '').length > 200 ? '...' : '') + '</p>',
+            '<button class="btn btn-secondary" onclick="nlEdit(' + p.id + ')">Edit</button>' +
+            (p.status === 'published'
+              ? '<a class="btn btn-secondary" target="_blank" href="/newsletter/' + LL.escape(p.slug) + '">View</a>' +
+                '<button class="btn btn-secondary" onclick="nlPublish(' + p.id + ',false)">Unpublish</button>'
+              : '<button class="btn btn-field" onclick="nlPublish(' + p.id + ',true)">Publish</button>') +
+            '<button class="btn btn-barn" onclick="nlDelete(' + p.id + ',\'' + (p.title || '').replace(/[\\\'"]/g,'') + '\')">Delete</button>'
+          )).join('')
+        : '<p class="dim">No posts yet.</p>';
+      const tlist = document.getElementById('nl-topics');
+      tlist.innerHTML = data.topics.length
+        ? data.topics.map(t => row(
+            LL.escape(LL.formatDate(t.created_at)) + (t.contact_name ? ' · from ' + LL.escape(t.contact_name) : '') + (t.contact ? ' · ' + LL.escape(t.contact) : ''),
+            '<p>' + LL.escape(t.body) + '</p>',
+            '<button class="btn btn-barn" onclick="topicDelete(' + t.id + ')">Dismiss</button>'
+          )).join('')
+        : '<p class="dim">No topic suggestions waiting.</p>';
+    }
+    window.nlEdit = async function (id) {
+      const data = await LL.api('/api/admin/newsletter');
+      const p = data.posts.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('nl-id').value = p.id;
+      document.getElementById('nl-title').value = p.title;
+      document.getElementById('nl-body').value = p.body;
+      document.getElementById('panel-newsletter').scrollIntoView({ behavior: 'smooth' });
+    };
+    window.nlPublish = async function (id, publish) {
+      try {
+        await LL.api('/api/admin/newsletter/' + id, { method: 'POST', body: { publish } });
+        await loadNewsletter();
+      } catch (err) { alert(err.message); }
+    };
+    window.nlDelete = async function (id, label) {
+      if (!confirm('Delete "' + label + '"?')) return;
+      try { await LL.api('/api/admin/newsletter/' + id + '/delete', { method: 'POST' }); await loadNewsletter(); }
+      catch (err) { alert(err.message); }
+    };
+    window.topicDelete = async function (id) {
+      try { await LL.api('/api/admin/topic/' + id + '/delete', { method: 'POST' }); await loadNewsletter(); }
+      catch (err) { alert(err.message); }
+    };
+    document.getElementById('nl-clear').addEventListener('click', () => {
+      document.getElementById('nl-id').value = '';
+      document.getElementById('nl-title').value = '';
+      document.getElementById('nl-body').value = '';
+    });
+    async function nlSave(publish) {
+      const id = document.getElementById('nl-id').value;
+      const body = {
+        title: document.getElementById('nl-title').value,
+        body: document.getElementById('nl-body').value,
+      };
+      if (typeof publish === 'boolean') body.publish = publish;
+      try {
+        if (id) await LL.api('/api/admin/newsletter/' + id, { method: 'POST', body });
+        else await LL.api('/api/admin/newsletter', { method: 'POST', body });
+        LL.notice('#nl-msg', publish ? 'Published.' : 'Saved.', 'success');
+        document.getElementById('nl-id').value = '';
+        document.getElementById('nl-title').value = '';
+        document.getElementById('nl-body').value = '';
+        await loadNewsletter();
+      } catch (err) { LL.notice('#nl-msg', err.message, 'error'); }
+    }
+    document.getElementById('nl-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      nlSave(false);
+    });
+    document.getElementById('nl-publish').addEventListener('click', () => nlSave(true));
+
+    // ---- discussion mod ----
+    async function loadDiscussion() {
+      const { threads } = await LL.api('/api/threads');
+      document.getElementById('d-threads').innerHTML = threads.length
+        ? threads.map(t => row(
+            (t.locked ? '<span class="tag">Locked</span> ' : '') + 'started ' + LL.escape(LL.formatDate(t.created_at)) + ' &middot; ' + t.reply_count + ' replies',
+            '<h3 style="margin:0"><a target="_blank" href="/discussion/' + LL.escape(t.slug) + '">' + LL.escape(t.title) + '</a></h3><p class="small">by ' + LL.userLabel(t) + '</p>',
+            '<button class="btn btn-secondary" onclick="thLock(' + t.id + ',' + (t.locked ? 0 : 1) + ')">' + (t.locked ? 'Unlock' : 'Lock') + '</button>' +
+            '<button class="btn btn-barn" onclick="thDel(' + t.id + ',\'' + (t.title || '').replace(/[\\\'"]/g,'') + '\')">Delete</button>'
+          )).join('')
+        : '<p class="dim">No threads yet.</p>';
+    }
+    window.thLock = async function (id, locked) {
+      try { await LL.api('/api/admin/thread/' + id + '/lock', { method: 'POST', body: { locked: !!locked } }); await loadDiscussion(); }
+      catch (err) { alert(err.message); }
+    };
+    window.thDel = async function (id, label) {
+      if (!confirm('Delete the thread "' + label + '"?')) return;
+      try { await LL.api('/api/admin/thread/' + id + '/delete', { method: 'POST' }); await loadDiscussion(); }
+      catch (err) { alert(err.message); }
+    };
+
+    // ---- donation ----
+    async function loadDonation() {
+      const { donation: d } = await LL.api('/api/donation');
+      document.getElementById('don-goal').value = Math.round((d.goal_cents || 0) / 100);
+      document.getElementById('don-raised').value = Math.round((d.raised_cents || 0) / 100);
+      document.getElementById('don-currency').value = d.currency || 'USD';
+      document.getElementById('don-url').value = d.url || '';
+      document.getElementById('don-url-label').value = d.url_label || 'Donate';
+      document.getElementById('don-msg').value = d.message || '';
+    }
+    document.getElementById('don-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        goal_cents: (parseInt(document.getElementById('don-goal').value, 10) || 0) * 100,
+        raised_cents: (parseInt(document.getElementById('don-raised').value, 10) || 0) * 100,
+        currency: document.getElementById('don-currency').value,
+        url: document.getElementById('don-url').value,
+        url_label: document.getElementById('don-url-label').value,
+        message: document.getElementById('don-msg').value,
+      };
+      try {
+        await LL.api('/api/admin/donation', { method: 'POST', body });
+        LL.notice('#don-status', 'Saved.', 'success');
+      } catch (err) { LL.notice('#don-status', err.message, 'error'); }
+    });
 
     // ---- logo upload ----
     document.getElementById('logo-form').addEventListener('submit', async (e) => {

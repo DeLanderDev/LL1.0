@@ -13,6 +13,7 @@
   <meta property="og:url" content="https://locallee.org/submit/aid-post">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
+  <script src="/js/altcha.min.js" defer></script>
   
 </head>
 <body>
@@ -29,6 +30,9 @@
         <a href="/events">Events</a>
         <a href="/literature">Literature</a>
         <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/newsletter">Newsletter</a>
+        <a href="/discussion">Discussion</a>
+        <a href="/donate">Donate</a>
         <a href="/contact">Contact</a>
       </nav>
       <div class="nav-account" id="nav-account" aria-live="polite"></div>
@@ -76,6 +80,7 @@
         <div class="form-row"><label for="contact_name">Your name (or what to call you)</label><input id="contact_name" name="contact_name" type="text" maxlength="80"></div>
         <div class="form-row"><label for="contact">How to reach you *</label><input id="contact" name="contact" type="text" required maxlength="200" placeholder="phone, email, or what works"></div>
       </div>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>
@@ -95,6 +100,9 @@
           <li><a href="/events">Events</a></li>
           <li><a href="/literature">Literature</a></li>
           <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/newsletter">Newsletter</a></li>
+          <li><a href="/discussion">Discussion</a></li>
+          <li><a href="/donate">Donate</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
       </div>
@@ -105,6 +113,7 @@
           <li><a href="/submit/event">Post an event</a></li>
           <li><a href="/submit/book">Suggest a book</a></li>
           <li><a href="/submit/aid-post">Post a need or offer</a></li>
+          <li><a href="/newsletter/suggest">Suggest a newsletter topic</a></li>
         </ul>
       </div>
     </div>

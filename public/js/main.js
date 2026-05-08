@@ -44,6 +44,24 @@
     return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
   };
 
+  // <img> markup for a user's avatar (uploaded image or monogram fallback).
+  LL.avatar = function (user, size) {
+    if (!user) return '';
+    const px = size || 40;
+    const id = user.user_id || user.id;
+    const name = user.display_name || (user.email ? user.email.split('@')[0] : 'L');
+    return (
+      '<img class="avatar" src="/avatar/' + id +
+      '" alt="" width="' + px + '" height="' + px + '" loading="lazy" ' +
+      'title="' + LL.escape(name) + '">'
+    );
+  };
+
+  LL.userLabel = function (user) {
+    if (!user) return 'someone';
+    return LL.escape(user.display_name || (user.email ? user.email.split('@')[0] : 'someone'));
+  };
+
   LL.api = async function (url, opts) {
     const o = Object.assign(
       {
@@ -94,7 +112,9 @@
             ? ' <a href="/admin">Admin</a>'
             : '';
         slot.innerHTML =
-          `<span class="who">Hi, ${LL.escape(name)}.</span>` +
+          `<a class="who" href="/profile" title="Edit your profile">` +
+          `<img class="avatar" src="/avatar/${user.id}" alt="" width="28" height="28">` +
+          ` ${LL.escape(name)}</a>` +
           adminLink +
           ' <button type="button" class="btn btn-secondary" id="btn-logout">Sign out</button>';
         document.getElementById('btn-logout').addEventListener('click', async () => {

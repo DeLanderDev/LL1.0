@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Book - Local Lee</title>
-  <meta name="description" content="A book on the Local Lee reading list.">
-  <link rel="canonical" href="https://locallee.org/literature">
+  <title>Newsletter post - Local Lee</title>
+  <meta name="description" content="A post from the Local Lee newsletter.">
+  <link rel="canonical" href="https://locallee.org/newsletter">
   <link rel="stylesheet" href="/css/style.css">
-  <meta property="og:title" content="Book - Local Lee">
-  <meta property="og:description" content="A book on the Local Lee reading list.">
+  <meta property="og:title" content="Newsletter post - Local Lee">
+  <meta property="og:description" content="A post from the Local Lee newsletter.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://locallee.org/literature">
+  <meta property="og:url" content="https://locallee.org/newsletter">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
   <script src="/js/altcha.min.js" defer></script>
@@ -40,9 +40,9 @@
   </header>
 
   <main id="main">
-    <article id="book" aria-busy="true"><p class="dim">Loading…</p></article>
+    <article id="post" aria-busy="true"><p class="dim">Loading...</p></article>
     <section id="comments-section" hidden>
-      <h2>Discussion</h2>
+      <h2>Comments</h2>
       <ul class="row-list" id="comments"></ul>
       <form id="comment-form" class="card" hidden>
         <div class="form-row">
@@ -50,7 +50,7 @@
           <textarea id="c-body" name="body" rows="4" maxlength="4000" required></textarea>
         </div>
         <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
-      <button type="submit" class="btn">Post comment</button>
+        <button type="submit" class="btn">Post comment</button>
         <div id="c-notice" class="notice small" hidden></div>
       </form>
       <p id="comment-signin" class="dim" hidden><a href="/login">Sign in</a> or <a href="/register">join</a> to comment.</p>
@@ -95,8 +95,8 @@
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
   <script>
     const slug = location.pathname.split('/').filter(Boolean).pop();
-    const root = document.getElementById('book');
-    let book = null;
+    const root = document.getElementById('post');
+    let post = null;
 
     function renderComments(comments) {
       const ul = document.getElementById('comments');
@@ -105,61 +105,62 @@
         return;
       }
       ul.innerHTML = comments.map(c => `
-        <li>
-          <div class="meta"><strong>${LL.escape(c.display_name || c.email.split('@')[0])}</strong> · ${LL.escape(LL.formatDate(c.created_at))}</div>
-          <p>${LL.escape(c.body)}</p>
+        <li class="comment-row">
+          ${LL.avatar(c, 40)}
+          <div>
+            <div class="meta"><strong>${LL.userLabel(c)}</strong> &middot; ${LL.escape(LL.formatDate(c.created_at))}</div>
+            <p>${LL.escape(c.body)}</p>
+          </div>
         </li>`).join('');
     }
 
     async function loadAll() {
       try {
-        const { book: b, comments } = await LL.api('/api/books/' + encodeURIComponent(slug));
-        book = b;
-        document.title = b.title + ' - Local Lee';
+        const data = await LL.api('/api/newsletter/' + encodeURIComponent(slug));
+        post = data.post;
+        document.title = post.title + ' - Local Lee';
         const ld = {
-          '@context': 'https://schema.org', '@type': 'Book',
-          name: b.title, author: b.author ? { '@type': 'Person', name: b.author } : undefined,
-          datePublished: b.year || undefined, description: b.description || undefined
+          '@context': 'https://schema.org', '@type': 'BlogPosting',
+          headline: post.title, datePublished: new Date((post.published_at || post.created_at) * 1000).toISOString(),
+          author: post.author_name ? { '@type': 'Person', name: post.author_name } : undefined
         };
         const ldEl = document.createElement('script');
         ldEl.type = 'application/ld+json';
         ldEl.textContent = JSON.stringify(ld);
         document.head.appendChild(ldEl);
+        const paragraphs = post.body.split(/\n{2,}/).map(p => '<p>' + LL.escape(p).replace(/\n/g, '<br>') + '</p>').join('');
         root.innerHTML = `
           <div class="page-head">
-            <p class="small dim"><a href="/literature">← Reading list</a></p>
-            <h1>${LL.escape(b.title)}</h1>
-            <p>${b.author ? LL.escape(b.author) : 'Unknown author'}${b.year ? ' · ' + LL.escape(b.year) : ''}${b.curated ? ' · <span class="tag">Curated</span>' : ' · <span class="tag">Reader pick</span>'}</p>
+            <p class="small dim"><a href="/newsletter">&larr; All posts</a></p>
+            <h1>${LL.escape(post.title)}</h1>
+            <p class="meta">${LL.escape(LL.formatDay(post.published_at || post.created_at))}${post.author_name ? ' &middot; by ' + LL.escape(post.author_name) : ''}</p>
           </div>
-          <div class="prose">
-            ${b.description ? '<p>' + LL.escape(b.description) + '</p>' : ''}
-            ${b.why_we_read ? '<h3>Why it\'s on the list</h3><blockquote>' + LL.escape(b.why_we_read) + '</blockquote>' : ''}
-          </div>
+          <div class="prose">${paragraphs}</div>
         `;
-        renderComments(comments);
+        renderComments(data.comments);
         document.getElementById('comments-section').hidden = false;
         const me = (await LL.api('/api/me')).user;
         if (me) document.getElementById('comment-form').hidden = false;
         else document.getElementById('comment-signin').hidden = false;
         root.setAttribute('aria-busy', 'false');
       } catch (err) {
-        root.innerHTML = '<p class="dim">Book not found. <a href="/literature">Back to the list.</a></p>';
+        root.innerHTML = '<p class="dim">Post not found. <a href="/newsletter">Back to the newsletter.</a></p>';
       }
     }
 
     document.getElementById('comment-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const body = document.getElementById('c-body').value.trim();
-      if (!body) return;
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      if (!body.body) return;
       try {
-        await LL.api('/api/books/' + book.id + '/comments', { method: 'POST', body: { body, altcha: e.currentTarget.elements.altcha ? e.currentTarget.elements.altcha.value : '' } });
+        await LL.api('/api/newsletter/' + post.id + '/comments', { method: 'POST', body });
         document.getElementById('c-body').value = '';
-        const data = await LL.api('/api/books/' + encodeURIComponent(slug));
+        const data = await LL.api('/api/newsletter/' + encodeURIComponent(slug));
         renderComments(data.comments);
         LL.notice('#c-notice', 'Posted.', 'success');
-      } catch (err) {
-        LL.notice('#c-notice', err.message, 'error');
-      }
+      } catch (err) { LL.notice('#c-notice', err.message, 'error'); }
     });
 
     loadAll();

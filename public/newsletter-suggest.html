@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Literature - Local Lee</title>
-  <meta name="description" content="A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.">
-  <link rel="canonical" href="https://locallee.org/literature">
+  <title>Suggest a newsletter topic - Local Lee</title>
+  <meta name="description" content="Suggest a topic for an upcoming Local Lee newsletter post.">
+  <link rel="canonical" href="https://locallee.org/newsletter/suggest">
   <link rel="stylesheet" href="/css/style.css">
-  <meta property="og:title" content="Literature - Local Lee">
-  <meta property="og:description" content="A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.">
+  <meta property="og:title" content="Suggest a newsletter topic - Local Lee">
+  <meta property="og:description" content="Suggest a topic for an upcoming Local Lee newsletter post.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://locallee.org/literature">
+  <meta property="og:url" content="https://locallee.org/newsletter/suggest">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
-  
+  <script src="/js/altcha.min.js" defer></script>
   
 </head>
 <body>
@@ -39,19 +39,24 @@
     </div>
   </header>
 
-  <main id="main">
+  <main id="main" class="narrow">
     <div class="page-head">
-      <h1>The Local Lee reading list</h1>
-      <p>Books on neighborhood, place, and household economy. <a href="/submit/book">Suggest one →</a></p>
+      <h1>Suggest a topic</h1>
+      <p>What would you like to see covered in an upcoming Local Lee post? Stories, businesses, events, questions about how something works in the county - all welcome.</p>
     </div>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true" data-which="curated">Curated</button>
-      <button class="tab" role="tab" aria-selected="false" data-which="suggested">Reader-suggested</button>
-      <button class="tab" role="tab" aria-selected="false" data-which="all">All</button>
-    </div>
-
-    <div id="books" class="card-grid" aria-busy="true"></div>
+    <form id="form" class="card" novalidate>
+      <div class="form-row">
+        <label for="body">Your suggestion *</label>
+        <textarea id="body" name="body" rows="5" required maxlength="2000"></textarea>
+      </div>
+      <div class="form-grid">
+        <div class="form-row"><label for="contact_name">Your name (optional)</label><input id="contact_name" name="contact_name" type="text" maxlength="80"></div>
+        <div class="form-row"><label for="contact">Email (optional, if you'd like a reply)</label><input id="contact" name="contact" type="text" maxlength="200"></div>
+      </div>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+      <button type="submit" class="btn">Send</button>
+      <div id="notice" class="notice" hidden></div>
+    </form>
   </main>
 
   <footer class="site-footer">
@@ -91,41 +96,17 @@
   <script src="/js/main.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
   <script>
-    let allBooks = [];
-    function render(which) {
-      const list = document.getElementById('books');
-      list.setAttribute('aria-busy', 'true');
-      let books = allBooks;
-      if (which === 'curated') books = allBooks.filter(b => b.curated);
-      if (which === 'suggested') books = allBooks.filter(b => !b.curated);
-      if (!books.length) {
-        list.innerHTML = '<p class="dim">No books here yet.</p>';
-      } else {
-        list.innerHTML = books.map(b => `
-          <article class="card">
-            <h3><a href="/literature/${LL.escape(b.slug)}">${LL.escape(b.title)}</a></h3>
-            <div class="meta">${b.author ? LL.escape(b.author) : 'Unknown author'}${b.year ? ' · ' + LL.escape(b.year) : ''}${b.curated ? ' · <span class="tag">Curated</span>' : ' · <span class="tag">Reader pick</span>'}</div>
-            <p>${LL.escape((b.description || '').slice(0, 240))}${(b.description || '').length > 240 ? '…' : ''}</p>
-          </article>`).join('');
-      }
-      list.setAttribute('aria-busy', 'false');
-    }
-    document.querySelectorAll('.tab').forEach(t => {
-      t.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', 'false'));
-        t.setAttribute('aria-selected', 'true');
-        render(t.dataset.which);
-      });
-    });
-    (async () => {
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
       try {
-        const { books } = await LL.api('/api/books');
-        allBooks = books;
-        render('curated');
-      } catch (err) {
-        document.getElementById('books').innerHTML = '<p class="dim">Couldn\'t load books.</p>';
-      }
-    })();
+        await LL.api('/api/newsletter/topics', { method: 'POST', body });
+        LL.notice('#notice', 'Thank you - your suggestion is in.', 'success');
+        f.reset();
+      } catch (err) { LL.notice('#notice', err.message, 'error'); }
+    });
   </script>
 </body>
 </html>

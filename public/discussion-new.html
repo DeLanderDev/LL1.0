@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Literature - Local Lee</title>
-  <meta name="description" content="A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.">
-  <link rel="canonical" href="https://locallee.org/literature">
+  <title>Start a thread - Local Lee</title>
+  <meta name="description" content="Start a new community discussion thread on Local Lee.">
+  <link rel="canonical" href="https://locallee.org/discussion/new">
   <link rel="stylesheet" href="/css/style.css">
-  <meta property="og:title" content="Literature - Local Lee">
-  <meta property="og:description" content="A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.">
+  <meta property="og:title" content="Start a thread - Local Lee">
+  <meta property="og:description" content="Start a new community discussion thread on Local Lee.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://locallee.org/literature">
+  <meta property="og:url" content="https://locallee.org/discussion/new">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
-  
+  <script src="/js/altcha.min.js" defer></script>
   
 </head>
 <body>
@@ -39,19 +39,21 @@
     </div>
   </header>
 
-  <main id="main">
+  <main id="main" class="narrow">
     <div class="page-head">
-      <h1>The Local Lee reading list</h1>
-      <p>Books on neighborhood, place, and household economy. <a href="/submit/book">Suggest one →</a></p>
+      <h1>Start a thread</h1>
+      <p>You need to be signed in to start one. Keep it about Lee County and the people who live here.</p>
     </div>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true" data-which="curated">Curated</button>
-      <button class="tab" role="tab" aria-selected="false" data-which="suggested">Reader-suggested</button>
-      <button class="tab" role="tab" aria-selected="false" data-which="all">All</button>
+    <div id="signin-gate" class="notice" hidden>
+      <a href="/login?next=/discussion/new">Sign in</a> or <a href="/register">join</a> to post.
     </div>
-
-    <div id="books" class="card-grid" aria-busy="true"></div>
+    <form id="form" class="card" novalidate hidden>
+      <div class="form-row"><label for="title">Title *</label><input id="title" name="title" type="text" required maxlength="200"></div>
+      <div class="form-row"><label for="body">Your post *</label><textarea id="body" name="body" rows="8" required maxlength="8000"></textarea></div>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+      <button type="submit" class="btn">Post thread</button>
+      <div id="notice" class="notice" hidden></div>
+    </form>
   </main>
 
   <footer class="site-footer">
@@ -91,41 +93,21 @@
   <script src="/js/main.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
   <script>
-    let allBooks = [];
-    function render(which) {
-      const list = document.getElementById('books');
-      list.setAttribute('aria-busy', 'true');
-      let books = allBooks;
-      if (which === 'curated') books = allBooks.filter(b => b.curated);
-      if (which === 'suggested') books = allBooks.filter(b => !b.curated);
-      if (!books.length) {
-        list.innerHTML = '<p class="dim">No books here yet.</p>';
-      } else {
-        list.innerHTML = books.map(b => `
-          <article class="card">
-            <h3><a href="/literature/${LL.escape(b.slug)}">${LL.escape(b.title)}</a></h3>
-            <div class="meta">${b.author ? LL.escape(b.author) : 'Unknown author'}${b.year ? ' · ' + LL.escape(b.year) : ''}${b.curated ? ' · <span class="tag">Curated</span>' : ' · <span class="tag">Reader pick</span>'}</div>
-            <p>${LL.escape((b.description || '').slice(0, 240))}${(b.description || '').length > 240 ? '…' : ''}</p>
-          </article>`).join('');
-      }
-      list.setAttribute('aria-busy', 'false');
-    }
-    document.querySelectorAll('.tab').forEach(t => {
-      t.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', 'false'));
-        t.setAttribute('aria-selected', 'true');
-        render(t.dataset.which);
-      });
-    });
     (async () => {
-      try {
-        const { books } = await LL.api('/api/books');
-        allBooks = books;
-        render('curated');
-      } catch (err) {
-        document.getElementById('books').innerHTML = '<p class="dim">Couldn\'t load books.</p>';
-      }
+      const me = (await LL.api('/api/me')).user;
+      if (!me) { document.getElementById('signin-gate').hidden = false; return; }
+      document.getElementById('form').hidden = false;
     })();
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      try {
+        const r = await LL.api('/api/threads', { method: 'POST', body });
+        location.href = '/discussion/' + r.slug;
+      } catch (err) { LL.notice('#notice', err.message, 'error'); }
+    });
   </script>
 </body>
 </html>

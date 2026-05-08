@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Literature - Local Lee</title>
-  <meta name="description" content="A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.">
-  <link rel="canonical" href="https://locallee.org/literature">
+  <title>Support Local Lee</title>
+  <meta name="description" content="Local Lee runs on a tiny budget - hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is moderating. Chip in if you can.">
+  <link rel="canonical" href="https://locallee.org/donate">
   <link rel="stylesheet" href="/css/style.css">
-  <meta property="og:title" content="Literature - Local Lee">
-  <meta property="og:description" content="A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.">
+  <meta property="og:title" content="Support Local Lee">
+  <meta property="og:description" content="Local Lee runs on a tiny budget - hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is moderating. Chip in if you can.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://locallee.org/literature">
+  <meta property="og:url" content="https://locallee.org/donate">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
   
@@ -39,19 +39,11 @@
     </div>
   </header>
 
-  <main id="main">
+  <main id="main" class="narrow">
     <div class="page-head">
-      <h1>The Local Lee reading list</h1>
-      <p>Books on neighborhood, place, and household economy. <a href="/submit/book">Suggest one →</a></p>
+      <h1>Support Local Lee</h1>
     </div>
-
-    <div class="tabs" role="tablist">
-      <button class="tab" role="tab" aria-selected="true" data-which="curated">Curated</button>
-      <button class="tab" role="tab" aria-selected="false" data-which="suggested">Reader-suggested</button>
-      <button class="tab" role="tab" aria-selected="false" data-which="all">All</button>
-    </div>
-
-    <div id="books" class="card-grid" aria-busy="true"></div>
+    <div id="donation" aria-busy="true"><p class="dim">Loading...</p></div>
   </main>
 
   <footer class="site-footer">
@@ -91,40 +83,36 @@
   <script src="/js/main.js"></script>
   <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
   <script>
-    let allBooks = [];
-    function render(which) {
-      const list = document.getElementById('books');
-      list.setAttribute('aria-busy', 'true');
-      let books = allBooks;
-      if (which === 'curated') books = allBooks.filter(b => b.curated);
-      if (which === 'suggested') books = allBooks.filter(b => !b.curated);
-      if (!books.length) {
-        list.innerHTML = '<p class="dim">No books here yet.</p>';
-      } else {
-        list.innerHTML = books.map(b => `
-          <article class="card">
-            <h3><a href="/literature/${LL.escape(b.slug)}">${LL.escape(b.title)}</a></h3>
-            <div class="meta">${b.author ? LL.escape(b.author) : 'Unknown author'}${b.year ? ' · ' + LL.escape(b.year) : ''}${b.curated ? ' · <span class="tag">Curated</span>' : ' · <span class="tag">Reader pick</span>'}</div>
-            <p>${LL.escape((b.description || '').slice(0, 240))}${(b.description || '').length > 240 ? '…' : ''}</p>
-          </article>`).join('');
-      }
-      list.setAttribute('aria-busy', 'false');
-    }
-    document.querySelectorAll('.tab').forEach(t => {
-      t.addEventListener('click', () => {
-        document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', 'false'));
-        t.setAttribute('aria-selected', 'true');
-        render(t.dataset.which);
-      });
-    });
-    (async () => {
+    function dollars(cents, currency) {
+      const n = (cents || 0) / 100;
       try {
-        const { books } = await LL.api('/api/books');
-        allBooks = books;
-        render('curated');
+        return n.toLocaleString(undefined, { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 });
+      } catch (_) { return '$' + n.toFixed(0); }
+    }
+    (async () => {
+      const root = document.getElementById('donation');
+      try {
+        const { donation: d } = await LL.api('/api/donation');
+        const goal = Math.max(d.goal_cents || 0, 1);
+        const pct = Math.min(100, Math.round((d.raised_cents / goal) * 100));
+        const paragraphs = (d.message || '').split(/\n{2,}/).map(p => '<p>' + LL.escape(p).replace(/\n/g, '<br>') + '</p>').join('');
+        root.innerHTML = `
+          ${paragraphs}
+          <div class="card" style="margin:1.5em 0">
+            <div class="goal-row"><strong>Raised:</strong> ${LL.escape(dollars(d.raised_cents, d.currency))}</div>
+            <div class="goal-row"><strong>Goal:</strong> ${LL.escape(dollars(d.goal_cents, d.currency))}</div>
+            <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" style="margin:.7em 0">
+              <div class="progress-fill" style="width:${pct}%"></div>
+            </div>
+            <div class="meta">${pct}% of the way there.</div>
+            ${d.url ? '<p style="margin-top:1em"><a class="btn btn-barn" href="' + LL.escape(d.url) + '" rel="noopener" target="_blank">' + LL.escape(d.url_label || 'Donate') + '</a></p>' : '<p class="dim small">A donation link will be posted here once we have one set up.</p>'}
+          </div>
+          <p class="small dim">Funds go toward operating the site - hosting, the domain, occasional advertising in local outlets, and other costs related to running this service. We are not a charity; donations are not tax-deductible. The progress bar is updated by hand, not by an integration, so it may lag the actual total by a day or two.</p>
+        `;
       } catch (err) {
-        document.getElementById('books').innerHTML = '<p class="dim">Couldn\'t load books.</p>';
+        root.innerHTML = '<p class="dim">Could not load donation info.</p>';
       }
+      root.setAttribute('aria-busy', 'false');
     })();
   </script>
 </body>
