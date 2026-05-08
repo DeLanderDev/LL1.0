@@ -106,7 +106,76 @@ for the admin to verify or deny.
 
 - [ ] Set a real `ADMIN_PASSWORD` and rotate it after first sign-in
 - [ ] Set a stable `SESSION_SECRET`
-- [ ] Front the app with HTTPS (nginx/caddy) and set `NODE_ENV=production`
+- [ ] Front the app with HTTPS (nginx + certbot) and set `NODE_ENV=production`
 - [ ] Point DNS for the chosen domain at the droplet
 - [ ] If the domain is not `locallee.org`, set `SITE_URL` accordingly and
       update the canonical hostnames inside the static HTML and `llms.txt`
+
+## Deploying to the DigitalOcean droplet
+
+`scripts/deploy.sh` is a one-shot deployer that runs **on the droplet itself**.
+It is intentionally narrow: it only touches Local Lee resources
+(`/opt/locallee`, the `locallee` system user, `locallee.service`,
+`/etc/locallee.env`, and a single nginx site file named `locallee`). It
+will refuse to overwrite any of those files if they exist and weren't
+written by us, so it can't clobber Sauk Saver or Simple Solutions.
+
+### First deploy
+
+```bash
+# On the droplet, as a user with sudo:
+sudo git clone https://github.com/DeLanderDev/LL1.0.git /opt/locallee
+cd /opt/locallee
+sudo ./scripts/deploy.sh
+```
+
+That will:
+
+1. Create the `locallee` system user (if missing).
+2. Check out `main` (configurable via `DEPLOY_BRANCH`) and `npm ci` deps.
+3. Generate `/etc/locallee.env` with a random `SESSION_SECRET` and
+   `ADMIN_PASSWORD` (printed once on stdout — save them).
+4. Write and start `locallee.service` (systemd, hardened, listening on
+   **port 8082** by default).
+5. Write `/etc/nginx/sites-available/locallee`. **It does not enable the
+   site until you give it a domain** — see below.
+
+### Updates
+
+```bash
+cd /opt/locallee
+sudo ./scripts/deploy.sh
+```
+
+Idempotent. Pulls the branch, reinstalls deps, restarts the service.
+
+### Wiring up nginx + HTTPS
+
+Once you've decided on a hostname and pointed DNS at the droplet:
+
+```bash
+sudo DOMAIN=locallee.example.org /opt/locallee/scripts/deploy.sh
+sudo certbot --nginx -d locallee.example.org
+```
+
+The first command symlinks the site into `sites-enabled` and reloads
+nginx; the second issues a Let's Encrypt cert and rewrites the site for
+HTTPS. Neither command touches any other site config on the box.
+
+### Useful overrides
+
+```bash
+DEPLOY_BRANCH=claude/build-local-lee-website-VgrQW \
+ADMIN_EMAIL=you@example.com \
+SITE_URL=https://locallee.example.org \
+DOMAIN=locallee.example.org \
+sudo -E ./scripts/deploy.sh
+```
+
+### Logs and ops
+
+```bash
+sudo systemctl status locallee
+sudo journalctl -u locallee -f          # tail logs
+sudo systemctl restart locallee         # restart only Local Lee
+```
