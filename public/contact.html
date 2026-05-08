@@ -61,7 +61,7 @@
         <textarea id="c-message" name="message" rows="6" required maxlength="4000"></textarea>
       </div>
       <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
-      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
+      <altcha-widget class="altcha" challenge="/api/altcha/challenge" auto="onload" configuration='{"hideFooter":true}' strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
       <button type="submit" class="btn">Send</button>
       <div id="c-notice" class="notice" hidden></div>
     </form>

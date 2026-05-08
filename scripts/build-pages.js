@@ -67,13 +67,13 @@ const FOOTER = `<footer class="site-footer">
     <p class="fine-print">© <span id="year"></span> Local Lee - Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
   </footer>`;
 
-// AltCha widget. auto="onload" runs the proof-of-work as soon as the
-// page loads so that by the time the visitor finishes filling out the
-// form, the hidden "altcha" input already has its solution and our
-// existing submit handlers (which iterate f.elements) pick it up
-// without needing to coordinate with the widget's submit interception.
+// AltCha widget (v3). The attribute is "challenge" (URL string), not
+// "challengeurl" (that was v2), and footer/logo hiding is done via the
+// "configuration" attribute as JSON. auto="onload" kicks off the
+// proof-of-work as soon as the page renders so the hidden "altcha"
+// input is already populated by the time the visitor submits.
 const ALTCHA = `<noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
-      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>`;
+      <altcha-widget class="altcha" challenge="/api/altcha/challenge" auto="onload" configuration='{"hideFooter":true}' strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>`;
 
 function shell(opts) {
   const {
