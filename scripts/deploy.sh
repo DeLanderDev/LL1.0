@@ -93,9 +93,18 @@ fi
 # --------------------------------------------------------------- code
 log "Updating code in ${APP_DIR} (branch: ${DEPLOY_BRANCH})…"
 git -C "${APP_DIR}" fetch --all --prune --quiet
+# Make sure the requested branch exists on origin before we destroy local state.
+if ! git -C "${APP_DIR}" rev-parse --verify --quiet "origin/${DEPLOY_BRANCH}" >/dev/null; then
+  die "Branch '${DEPLOY_BRANCH}' not found on origin. Set DEPLOY_BRANCH=<branch> or merge your PR first."
+fi
 # Make sure we end up on the requested branch even if HEAD is detached.
 git -C "${APP_DIR}" checkout -q "${DEPLOY_BRANCH}"
 git -C "${APP_DIR}" reset --hard "origin/${DEPLOY_BRANCH}" --quiet
+
+# Sanity: the branch we just checked out actually contains the app.
+if [[ ! -f "${APP_DIR}/server.js" || ! -f "${APP_DIR}/package.json" ]]; then
+  die "Branch '${DEPLOY_BRANCH}' does not contain server.js / package.json. Pick a different DEPLOY_BRANCH."
+fi
 
 mkdir -p "${APP_DIR}/data"
 chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}/data"
