@@ -19,6 +19,23 @@ const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'contact@locallee.org';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'changeme';
 const SITE_URL = process.env.SITE_URL || 'https://locallee.org';
 const POST_TTL_DAYS = 30;
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// Refuse to start in production with the seed admin password — it would
+// silently leave a known-credential account on the box.
+if (IS_PROD && (ADMIN_PASSWORD === 'changeme' || ADMIN_PASSWORD.length < 12)) {
+  console.error(
+    'Refusing to start: ADMIN_PASSWORD is unset, default, or too short. ' +
+      'Set a strong ADMIN_PASSWORD in /etc/locallee.env before deploying.'
+  );
+  process.exit(1);
+}
+if (IS_PROD && !process.env.SESSION_SECRET) {
+  console.error(
+    'Refusing to start: SESSION_SECRET is not set. Sessions would be invalidated on every restart.'
+  );
+  process.exit(1);
+}
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -324,12 +341,71 @@ app.use(
   })
 );
 
+// Inline scripts are used throughout the static pages, so script-src has to
+// include 'unsafe-inline'. Everything else stays same-origin.
+const CSP =
+  "default-src 'self'; " +
+  "script-src 'self' 'unsafe-inline'; " +
+  "style-src 'self' 'unsafe-inline'; " +
+  "img-src 'self' data:; " +
+  "connect-src 'self'; " +
+  "form-action 'self'; " +
+  "frame-ancestors 'self'; " +
+  "base-uri 'self'; " +
+  "object-src 'none'";
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Content-Security-Policy', CSP);
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()'
+  );
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  if (IS_PROD) {
+    res.setHeader(
+      'Strict-Transport-Security',
+      'max-age=31536000; includeSubDomains'
+    );
+  }
   next();
 });
+
+// Tiny in-memory rate limiter, keyed on client IP (req.ip honours
+// trust proxy). Two buckets: a strict one for auth and contact
+// (5 / 15 min) and a looser one for public submission endpoints
+// (10 / hour). We don't need anything more — the site is small and
+// nginx fronts the box.
+function rateLimit({ windowMs, max, name }) {
+  const store = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of store) if (v.resetAt <= now) store.delete(k);
+  }, 5 * 60 * 1000).unref();
+  return (req, res, next) => {
+    const key = name + ':' + (req.ip || 'unknown');
+    const now = Date.now();
+    const entry = store.get(key);
+    if (!entry || now >= entry.resetAt) {
+      store.set(key, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+    entry.count += 1;
+    if (entry.count > max) {
+      const retry = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
+      res.set('Retry-After', String(retry));
+      return res.status(429).json({ error: 'Too many requests, please slow down.' });
+    }
+    next();
+  };
+}
+
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, name: 'auth' });
+const contactLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, name: 'contact' });
+const submitLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 15, name: 'submit' });
 
 // ----- Helpers -----
 function slugify(input) {
@@ -381,7 +457,7 @@ setInterval(expireAidPosts, 1000 * 60 * 60).unref();
 expireAidPosts();
 
 // ----- Auth API -----
-app.post('/api/register', (req, res) => {
+app.post('/api/register', authLimiter, (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
   const display = trim(req.body.display_name, 80);
@@ -406,7 +482,7 @@ app.post('/api/register', (req, res) => {
   res.json({ ok: true, role: 'member', email });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authLimiter, (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
   const user = db
@@ -442,11 +518,18 @@ app.get('/api/categories', (req, res) => {
 });
 
 // ----- Business Directory -----
+// Public business columns — explicitly enumerated so we never leak
+// submitted_by / owner_user_id / claim metadata to anonymous callers.
+const PUBLIC_BIZ_COLS = `
+  b.id, b.name, b.slug, b.description, b.category_id, b.town,
+  b.address, b.phone, b.email, b.website, b.hours, b.claim_status,
+  b.created_at`;
+
 app.get('/api/businesses', (req, res) => {
   const cat = req.query.category;
   const town = req.query.town;
   const q = req.query.q;
-  let sql = `SELECT b.*, c.name AS category_name, c.slug AS category_slug,
+  let sql = `SELECT ${PUBLIC_BIZ_COLS}, c.name AS category_name, c.slug AS category_slug,
                     p.name AS parent_name, p.slug AS parent_slug
              FROM businesses b
              LEFT JOIN categories c ON c.id = b.category_id
@@ -472,7 +555,7 @@ app.get('/api/businesses', (req, res) => {
 app.get('/api/businesses/:slug', (req, res) => {
   const row = db
     .prepare(
-      `SELECT b.*, c.name AS category_name, c.slug AS category_slug
+      `SELECT ${PUBLIC_BIZ_COLS}, c.name AS category_name, c.slug AS category_slug
        FROM businesses b LEFT JOIN categories c ON c.id = b.category_id
        WHERE b.slug = ? AND b.status = 'approved'`
     )
@@ -481,7 +564,7 @@ app.get('/api/businesses/:slug', (req, res) => {
   res.json({ business: row });
 });
 
-app.post('/api/businesses', (req, res) => {
+app.post('/api/businesses', submitLimiter, (req, res) => {
   const name = trim(req.body.name, 120);
   if (!name) return res.status(400).json({ error: 'Business name required.' });
   const fields = {
@@ -522,7 +605,9 @@ app.get('/api/events', (req, res) => {
   const now = Math.floor(Date.now() / 1000);
   const rows = db
     .prepare(
-      `SELECT e.*, (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS rsvp_count
+      `SELECT e.id, e.title, e.slug, e.description, e.starts_at, e.ends_at,
+              e.location, e.town, e.organizer, e.contact, e.created_at,
+              (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS rsvp_count
        FROM events e WHERE e.status = 'approved' AND e.starts_at >= ?
        ORDER BY e.starts_at ASC`
     )
@@ -533,7 +618,9 @@ app.get('/api/events', (req, res) => {
 app.get('/api/events/:slug', (req, res) => {
   const e = db
     .prepare(
-      `SELECT e.*, (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS rsvp_count
+      `SELECT e.id, e.title, e.slug, e.description, e.starts_at, e.ends_at,
+              e.location, e.town, e.organizer, e.contact, e.created_at,
+              (SELECT COUNT(*) FROM event_rsvps r WHERE r.event_id = e.id) AS rsvp_count
        FROM events e WHERE e.slug = ? AND e.status = 'approved'`
     )
     .get(req.params.slug);
@@ -547,7 +634,7 @@ app.get('/api/events/:slug', (req, res) => {
   res.json({ event: e, rsvped });
 });
 
-app.post('/api/events', (req, res) => {
+app.post('/api/events', submitLimiter, (req, res) => {
   const title = trim(req.body.title, 160);
   const startsAt = parseInt(req.body.starts_at, 10);
   if (!title) return res.status(400).json({ error: 'Title required.' });
@@ -605,9 +692,12 @@ app.post('/api/events/:id/rsvp', (req, res) => {
 });
 
 // ----- Literature -----
+const PUBLIC_BOOK_COLS =
+  'id, title, slug, author, year, description, why_we_read, curated, created_at';
+
 app.get('/api/books', (req, res) => {
   const curated = req.query.curated;
-  let sql = "SELECT * FROM books WHERE status = 'approved'";
+  let sql = `SELECT ${PUBLIC_BOOK_COLS} FROM books WHERE status = 'approved'`;
   if (curated === '1') sql += ' AND curated = 1';
   if (curated === '0') sql += ' AND curated = 0';
   sql += ' ORDER BY curated DESC, title';
@@ -616,12 +706,16 @@ app.get('/api/books', (req, res) => {
 
 app.get('/api/books/:slug', (req, res) => {
   const b = db
-    .prepare("SELECT * FROM books WHERE slug = ? AND status = 'approved'")
+    .prepare(
+      `SELECT ${PUBLIC_BOOK_COLS} FROM books WHERE slug = ? AND status = 'approved'`
+    )
     .get(req.params.slug);
   if (!b) return res.status(404).json({ error: 'Not found.' });
+  // Never expose commenter email — display_name only, with a fallback.
   const comments = db
     .prepare(
-      `SELECT c.id, c.body, c.created_at, u.display_name, u.email
+      `SELECT c.id, c.body, c.created_at,
+              COALESCE(NULLIF(u.display_name, ''), 'A neighbor') AS display_name
        FROM book_comments c JOIN users u ON u.id = c.user_id
        WHERE c.book_id = ? AND c.status = 'approved' ORDER BY c.created_at DESC`
     )
@@ -629,7 +723,7 @@ app.get('/api/books/:slug', (req, res) => {
   res.json({ book: b, comments });
 });
 
-app.post('/api/books', (req, res) => {
+app.post('/api/books', submitLimiter, (req, res) => {
   const title = trim(req.body.title, 200);
   if (!title) return res.status(400).json({ error: 'Title required.' });
   const slug = uniqueSlug('books', slugify(title));
@@ -666,7 +760,9 @@ app.post('/api/books/:id/comments', requireAuth, (req, res) => {
 // ----- Mutual Aid: curated resources -----
 app.get('/api/aid/resources', (req, res) => {
   const cat = req.query.category;
-  let sql = "SELECT * FROM aid_resources WHERE status = 'approved'";
+  let sql =
+    "SELECT id, name, slug, category, description, town, address, phone, " +
+    "website, hours, notes, created_at FROM aid_resources WHERE status = 'approved'";
   const params = [];
   if (cat) {
     sql += ' AND lower(category) = lower(?)';
@@ -676,7 +772,7 @@ app.get('/api/aid/resources', (req, res) => {
   res.json({ resources: db.prepare(sql).all(...params) });
 });
 
-app.post('/api/aid/resources', (req, res) => {
+app.post('/api/aid/resources', submitLimiter, (req, res) => {
   const name = trim(req.body.name, 160);
   const category = trim(req.body.category, 80);
   if (!name) return res.status(400).json({ error: 'Name required.' });
@@ -723,13 +819,16 @@ app.get('/api/aid/posts', (req, res) => {
 app.get('/api/aid/posts/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const row = db
-    .prepare("SELECT * FROM aid_posts WHERE id = ? AND status = 'approved'")
+    .prepare(
+      "SELECT id, kind, title, body, category, town, contact, contact_name, " +
+        "expires_at, created_at FROM aid_posts WHERE id = ? AND status = 'approved'"
+    )
     .get(id);
   if (!row) return res.status(404).json({ error: 'Not found.' });
   res.json({ post: row });
 });
 
-app.post('/api/aid/posts', (req, res) => {
+app.post('/api/aid/posts', submitLimiter, (req, res) => {
   const kind = req.body.kind === 'need' ? 'need' : req.body.kind === 'offer' ? 'offer' : null;
   if (!kind) return res.status(400).json({ error: 'kind must be need or offer.' });
   const title = trim(req.body.title, 160);
@@ -761,7 +860,7 @@ app.post('/api/aid/posts', (req, res) => {
 });
 
 // ----- Contact -----
-app.post('/api/contact', (req, res) => {
+app.post('/api/contact', contactLimiter, (req, res) => {
   const name = trim(req.body.name, 120);
   const email = trim(req.body.email, 254);
   const message = trim(req.body.message, 4000);
@@ -837,26 +936,66 @@ app.post('/api/admin/business/:id/claim/reject', requireAdmin, (req, res) => {
 
 // ----- Sitemap & robots & llms.txt (dynamic with current content) -----
 app.get('/sitemap.xml', (req, res) => {
-  const urls = [
-    '/', '/about', '/contact', '/directory', '/events', '/literature', '/mutual-aid',
-  ];
-  const rows = [
-    ...db.prepare("SELECT slug FROM businesses WHERE status='approved'").all().map(r => `/directory/${r.slug}`),
-    ...db.prepare("SELECT slug FROM events WHERE status='approved'").all().map(r => `/events/${r.slug}`),
-    ...db.prepare("SELECT slug FROM books WHERE status='approved'").all().map(r => `/literature/${r.slug}`),
-  ];
-  const all = urls.concat(rows);
+  const today = new Date().toISOString().slice(0, 10);
+  const isoDay = (sec) =>
+    sec ? new Date(sec * 1000).toISOString().slice(0, 10) : today;
+
+  const staticUrls = [
+    { loc: '/', changefreq: 'daily', priority: '1.0' },
+    { loc: '/about', changefreq: 'monthly', priority: '0.6' },
+    { loc: '/contact', changefreq: 'monthly', priority: '0.4' },
+    { loc: '/directory', changefreq: 'daily', priority: '0.9' },
+    { loc: '/events', changefreq: 'daily', priority: '0.9' },
+    { loc: '/literature', changefreq: 'weekly', priority: '0.7' },
+    { loc: '/mutual-aid', changefreq: 'daily', priority: '0.8' },
+  ].map((u) => ({ ...u, lastmod: today }));
+
+  const businesses = db
+    .prepare("SELECT slug, created_at FROM businesses WHERE status='approved'")
+    .all()
+    .map((r) => ({
+      loc: `/directory/${r.slug}`,
+      lastmod: isoDay(r.created_at),
+      changefreq: 'weekly',
+      priority: '0.7',
+    }));
+  const events = db
+    .prepare("SELECT slug, created_at FROM events WHERE status='approved'")
+    .all()
+    .map((r) => ({
+      loc: `/events/${r.slug}`,
+      lastmod: isoDay(r.created_at),
+      changefreq: 'weekly',
+      priority: '0.6',
+    }));
+  const books = db
+    .prepare("SELECT slug, created_at FROM books WHERE status='approved'")
+    .all()
+    .map((r) => ({
+      loc: `/literature/${r.slug}`,
+      lastmod: isoDay(r.created_at),
+      changefreq: 'monthly',
+      priority: '0.6',
+    }));
+
+  const all = staticUrls.concat(businesses, events, books);
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
     all
       .map(
         (u) =>
-          `  <url><loc>${SITE_URL}${u}</loc><changefreq>weekly</changefreq></url>`
+          `  <url><loc>${SITE_URL}${u.loc}</loc>` +
+          `<lastmod>${u.lastmod}</lastmod>` +
+          `<changefreq>${u.changefreq}</changefreq>` +
+          `<priority>${u.priority}</priority></url>`
       )
       .join('\n') +
     '\n</urlset>\n';
-  res.set('Content-Type', 'application/xml').send(xml);
+  res
+    .set('Content-Type', 'application/xml')
+    .set('Cache-Control', 'public, max-age=600')
+    .send(xml);
 });
 
 // ----- Pretty routes for slug pages (serve static page; client JS fetches data) -----

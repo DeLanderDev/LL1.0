@@ -114,6 +114,7 @@
         const { book: b, comments } = await LL.api('/api/books/' + encodeURIComponent(slug));
         book = b;
         document.title = b.title + ' — Local Lee';
+        LL.setCanonical(location.pathname, document.title);
         const ld = {
           '@context': 'https://schema.org', '@type': 'Book',
           name: b.title, author: b.author ? { '@type': 'Person', name: b.author } : undefined,

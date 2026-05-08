@@ -87,6 +87,7 @@
       try {
         const { business: b } = await LL.api('/api/businesses/' + encodeURIComponent(slug));
         document.title = b.name + ' — Local Lee';
+        LL.setCanonical(location.pathname, document.title);
         const ld = {
           '@context': 'https://schema.org', '@type': 'LocalBusiness',
           name: b.name, description: b.description || undefined,

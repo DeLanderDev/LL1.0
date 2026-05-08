@@ -102,8 +102,8 @@
           method: 'POST',
           body: { email: f.email.value, password: f.password.value }
         });
-        const next = new URLSearchParams(location.search).get('next') || '/';
-        location.href = next;
+        const raw = new URLSearchParams(location.search).get('next');
+        location.href = LL.safeNext(raw, '/');
       } catch (err) {
         LL.notice('#notice', err.message, 'error');
       }
