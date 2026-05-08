@@ -1,6 +1,6 @@
 # Local Lee
 
-A neighborly network for Lee County, Illinois — locally owned businesses,
+A neighborly network for Lee County, Illinois - locally owned businesses,
 community events, a reading list, and a mutual-aid board.
 
 Built like the existing Sauk Saver / Simple Solutions stack:
@@ -39,8 +39,8 @@ Override via env vars if needed:
 
 Visit:
 
-- `http://localhost:8082/` — public site
-- `http://localhost:8082/admin` — admin queue (sign in as the admin first)
+- `http://localhost:8082/` - public site
+- `http://localhost:8082/admin` - admin queue (sign in as the admin first)
 
 ## Layout
 
@@ -50,7 +50,7 @@ package.json
 public/
   index.html           # home (hand-authored)
   about.html           # about (hand-authored)
-  *.html               # other pages — generated from scripts/build-pages.js
+  *.html               # other pages - generated from scripts/build-pages.js
   css/style.css
   js/main.js
   robots.txt
@@ -89,7 +89,7 @@ All submissions enter `status = 'pending'` and are reviewed in `/admin`.
 Mutual-aid needs/offers also auto-expire after 30 days (a background timer
 moves them to `status = 'expired'`).
 
-Business listings additionally support a "claim" flow — a registered user
+Business listings additionally support a "claim" flow - a registered user
 can claim a listing, which moves it to `claim_status = 'claim_pending'`
 for the admin to verify or deny.
 
@@ -134,11 +134,11 @@ That will:
 1. Create the `locallee` system user (if missing).
 2. Check out `main` (configurable via `DEPLOY_BRANCH`) and `npm ci` deps.
 3. Generate `/etc/locallee.env` with a random `SESSION_SECRET` and
-   `ADMIN_PASSWORD` (printed once on stdout — save them).
+   `ADMIN_PASSWORD` (printed once on stdout - save them).
 4. Write and start `locallee.service` (systemd, hardened, listening on
    **port 8082** by default).
 5. Write `/etc/nginx/sites-available/locallee`. **It does not enable the
-   site until you give it a domain** — see below.
+   site until you give it a domain** - see below.
 
 ### Updates
 

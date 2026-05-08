@@ -9,20 +9,13 @@ const fs = require('fs');
 const path = require('path');
 const PUB = path.join(__dirname, '..', 'public');
 
-const SVG = `<svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
-          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
-          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
-          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
-          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
-          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
-        </svg>`;
+const BRAND_IMG = `<img class="brand-mark" src="/brand-mark" alt="" width="44" height="44">`;
 
 const HEADER = `<a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="header-inner">
       <a class="brand" href="/" aria-label="Local Lee home">
-        ${SVG}
+        ${BRAND_IMG}
         <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
       </a>
       <nav class="primary" aria-label="Primary">
@@ -41,7 +34,7 @@ const FOOTER = `<footer class="site-footer">
     <div class="footer-inner">
       <div>
         <h4>Local Lee</h4>
-        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+        <p>A neighborly network for Lee County, Illinois - Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
       </div>
       <div>
         <h4>Around the site</h4>
@@ -64,7 +57,7 @@ const FOOTER = `<footer class="site-footer">
         </ul>
       </div>
     </div>
-    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+    <p class="fine-print">© <span id="year"></span> Local Lee - Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
   </footer>`;
 
 function shell(opts) {
@@ -116,13 +109,13 @@ const pages = {};
 
 // ----- Contact -----
 pages['contact.html'] = shell({
-  title: 'Contact — Local Lee',
-  description: 'Get in touch with Local Lee — corrections, suggestions, or a hand with the editing.',
+  title: 'Contact - Local Lee',
+  description: 'Get in touch with Local Lee - corrections, suggestions, or a hand with the editing.',
   canonical: '/contact',
   narrow: true,
   main: `    <div class="page-head">
       <h1>Get in touch</h1>
-      <p>Corrections, suggestions, or an offer to help — we read everything that comes in.</p>
+      <p>Corrections, suggestions, or an offer to help - we read everything that comes in.</p>
     </div>
 
     <p>You can reach us by email at <a href="mailto:contact@locallee.org">contact@locallee.org</a>, or use the form below.</p>
@@ -156,7 +149,7 @@ pages['contact.html'] = shell({
             message: f.message.value,
           },
         });
-        LL.notice('#c-notice', 'Thank you — we\\'ll be in touch.', 'success');
+        LL.notice('#c-notice', 'Thank you - we\\'ll be in touch.', 'success');
         f.reset();
       } catch (err) {
         LL.notice('#c-notice', err.message, 'error');
@@ -167,8 +160,8 @@ pages['contact.html'] = shell({
 
 // ----- Business Directory (list) -----
 pages['directory.html'] = shell({
-  title: 'Business Directory — Local Lee',
-  description: 'A directory of locally owned businesses across Lee County, Illinois — farms, shops, trades, eateries, and more. Browse by category or town, or submit your own.',
+  title: 'Business Directory - Local Lee',
+  description: 'A directory of locally owned businesses across Lee County, Illinois - farms, shops, trades, eateries, and more. Browse by category or town, or submit your own.',
   canonical: '/directory',
   main: `    <div class="page-head">
       <h1>The Local Lee directory</h1>
@@ -216,7 +209,7 @@ pages['directory.html'] = shell({
         const kids = categories.filter(c => c.parent_id === p.id);
         for (const k of kids) {
           const o = document.createElement('option');
-          o.value = k.slug; o.textContent = '   — ' + k.name;
+          o.value = k.slug; o.textContent = '   - ' + k.name;
           sel.appendChild(o);
         }
       }
@@ -270,7 +263,7 @@ pages['directory.html'] = shell({
 
 // ----- Single business page -----
 pages['business.html'] = shell({
-  title: 'Business — Local Lee',
+  title: 'Business - Local Lee',
   description: 'A locally owned business in Lee County, Illinois.',
   canonical: '/directory',
   main: `    <article id="biz" aria-busy="true">
@@ -282,7 +275,7 @@ pages['business.html'] = shell({
     (async () => {
       try {
         const { business: b } = await LL.api('/api/businesses/' + encodeURIComponent(slug));
-        document.title = b.name + ' — Local Lee';
+        document.title = b.name + ' - Local Lee';
         const ld = {
           '@context': 'https://schema.org', '@type': 'LocalBusiness',
           name: b.name, description: b.description || undefined,
@@ -320,7 +313,7 @@ pages['business.html'] = shell({
         document.getElementById('claim-btn').addEventListener('click', async () => {
           try {
             await LL.api('/api/businesses/' + b.id + '/claim', { method: 'POST' });
-            LL.notice('#claim-msg', 'Claim submitted — an editor will follow up to verify.', 'success');
+            LL.notice('#claim-msg', 'Claim submitted - an editor will follow up to verify.', 'success');
           } catch (err) {
             LL.notice('#claim-msg', err.message, 'error');
           }
@@ -336,8 +329,8 @@ pages['business.html'] = shell({
 
 // ----- Events list -----
 pages['events.html'] = shell({
-  title: 'Events — Local Lee',
-  description: 'Upcoming community events in Lee County, Illinois — church suppers, farmers markets, school plays, work parties, and more. Anyone can submit.',
+  title: 'Events - Local Lee',
+  description: 'Upcoming community events in Lee County, Illinois - church suppers, farmers markets, school plays, work parties, and more. Anyone can submit.',
   canonical: '/events',
   main: `    <div class="page-head">
       <h1>What's coming up</h1>
@@ -353,7 +346,7 @@ pages['events.html'] = shell({
       try {
         const { events } = await LL.api('/api/events');
         if (!events.length) {
-          list.innerHTML = '<li class="dim">No events on the books yet — <a href="/submit/event">post the first one</a>.</li>';
+          list.innerHTML = '<li class="dim">No events on the books yet - <a href="/submit/event">post the first one</a>.</li>';
         } else {
           list.innerHTML = events.map(e => \`
             <li>
@@ -372,7 +365,7 @@ pages['events.html'] = shell({
 
 // ----- Single event -----
 pages['event.html'] = shell({
-  title: 'Event — Local Lee',
+  title: 'Event - Local Lee',
   description: 'A community event in Lee County, Illinois.',
   canonical: '/events',
   main: `    <article id="event" aria-busy="true"><p class="dim">Loading…</p></article>`,
@@ -399,7 +392,7 @@ pages['event.html'] = shell({
       ldEl.textContent = JSON.stringify(ld);
       document.head.appendChild(ldEl);
 
-      document.title = e.title + ' — Local Lee';
+      document.title = e.title + ' - Local Lee';
       root.innerHTML = \`
         <div class="page-head">
           <p class="small dim"><a href="/events">← All events</a></p>
@@ -451,8 +444,8 @@ pages['event.html'] = shell({
 
 // ----- Literature list -----
 pages['literature.html'] = shell({
-  title: 'Literature — Local Lee',
-  description: 'A curated reading list on neighborhood, place, and household life — plus reader-suggested books, with room for discussion.',
+  title: 'Literature - Local Lee',
+  description: 'A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.',
   canonical: '/literature',
   main: `    <div class="page-head">
       <h1>The Local Lee reading list</h1>
@@ -507,7 +500,7 @@ pages['literature.html'] = shell({
 
 // ----- Single book page -----
 pages['book.html'] = shell({
-  title: 'Book — Local Lee',
+  title: 'Book - Local Lee',
   description: 'A book on the Local Lee reading list.',
   canonical: '/literature',
   main: `    <article id="book" aria-busy="true"><p class="dim">Loading…</p></article>
@@ -546,7 +539,7 @@ pages['book.html'] = shell({
       try {
         const { book: b, comments } = await LL.api('/api/books/' + encodeURIComponent(slug));
         book = b;
-        document.title = b.title + ' — Local Lee';
+        document.title = b.title + ' - Local Lee';
         const ld = {
           '@context': 'https://schema.org', '@type': 'Book',
           name: b.title, author: b.author ? { '@type': 'Person', name: b.author } : undefined,
@@ -599,8 +592,8 @@ pages['book.html'] = shell({
 
 // ----- Mutual aid -----
 pages['mutual-aid.html'] = shell({
-  title: 'Mutual Aid — Local Lee',
-  description: 'Mutual aid in Lee County, Illinois — a directory of food pantries, warming centers, and family resources, plus a community board of needs and offers, all reviewed before posting.',
+  title: 'Mutual Aid - Local Lee',
+  description: 'Mutual aid in Lee County, Illinois - a directory of food pantries, warming centers, and family resources, plus a community board of needs and offers, all reviewed before posting.',
   canonical: '/mutual-aid',
   main: `    <div class="page-head">
       <h1>Mutual aid in Lee County</h1>
@@ -608,7 +601,7 @@ pages['mutual-aid.html'] = shell({
     </div>
 
     <div class="notice">
-      <strong>How this works.</strong> An editor reviews every post before it appears. We don't host messaging here — when you reply to a post you're contacting a neighbor directly with the contact info they shared. Use ordinary good sense.
+      <strong>How this works.</strong> An editor reviews every post before it appears. We don't host messaging here - when you reply to a post you're contacting a neighbor directly with the contact info they shared. Use ordinary good sense.
     </div>
 
     <div class="tabs" role="tablist">
@@ -693,7 +686,7 @@ pages['mutual-aid.html'] = shell({
 
 // ----- Single aid post -----
 pages['aid-post.html'] = shell({
-  title: 'Mutual Aid Post — Local Lee',
+  title: 'Mutual Aid Post - Local Lee',
   description: 'A community mutual-aid post in Lee County, Illinois.',
   canonical: '/mutual-aid',
   main: `    <article id="post" aria-busy="true"><p class="dim">Loading…</p></article>`,
@@ -704,7 +697,7 @@ pages['aid-post.html'] = shell({
       try {
         const { post: p } = await LL.api('/api/aid/posts/' + encodeURIComponent(id));
         const days = LL.daysUntil(p.expires_at);
-        document.title = p.title + ' — Local Lee';
+        document.title = p.title + ' - Local Lee';
         root.innerHTML = \`
           <div class="page-head">
             <p class="small dim"><a href="/mutual-aid">← Mutual aid</a></p>
@@ -730,7 +723,7 @@ pages['aid-post.html'] = shell({
 
 // ----- Login -----
 pages['login.html'] = shell({
-  title: 'Sign in — Local Lee',
+  title: 'Sign in - Local Lee',
   description: 'Sign in to Local Lee to comment, claim a business, or post to the mutual-aid board.',
   canonical: '/login',
   main: `    <div class="auth-card">
@@ -769,7 +762,7 @@ pages['login.html'] = shell({
 
 // ----- Register -----
 pages['register.html'] = shell({
-  title: 'Join — Local Lee',
+  title: 'Join - Local Lee',
   description: 'Create a free Local Lee account to comment, claim a listing, or post to the mutual-aid board.',
   canonical: '/register',
   main: `    <div class="auth-card">
@@ -812,7 +805,7 @@ pages['register.html'] = shell({
 
 // ----- Submit business -----
 pages['submit-business.html'] = shell({
-  title: 'List a business — Local Lee',
+  title: 'List a business - Local Lee',
   description: 'Submit a locally owned Lee County business to the Local Lee directory. An editor reviews each submission before it appears.',
   canonical: '/submit/business',
   narrow: true,
@@ -829,12 +822,12 @@ pages['submit-business.html'] = shell({
       <div class="form-grid">
         <div class="form-row">
           <label for="category_id">Category</label>
-          <select id="category_id" name="category_id"><option value="">— pick one —</option></select>
+          <select id="category_id" name="category_id"><option value="">- pick one -</option></select>
         </div>
         <div class="form-row">
           <label for="town">Town</label>
           <select id="town" name="town">
-            <option value="">— pick one —</option>
+            <option value="">- pick one -</option>
             <option>Dixon</option><option>Amboy</option><option>Ashton</option>
             <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
             <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
@@ -894,13 +887,13 @@ pages['submit-business.html'] = shell({
 
 // ----- Submit event -----
 pages['submit-event.html'] = shell({
-  title: 'Post an event — Local Lee',
+  title: 'Post an event - Local Lee',
   description: 'Submit a community event happening in Lee County, Illinois. An editor reviews each one before posting.',
   canonical: '/submit/event',
   narrow: true,
   main: `    <div class="page-head">
       <h1>Post an event</h1>
-      <p>Suppers, markets, work parties, school plays — anything happening in Lee County.</p>
+      <p>Suppers, markets, work parties, school plays - anything happening in Lee County.</p>
     </div>
 
     <form id="form" class="card" novalidate>
@@ -911,7 +904,7 @@ pages['submit-event.html'] = shell({
         <div class="form-row">
           <label for="town">Town</label>
           <select id="town" name="town">
-            <option value="">— pick one —</option>
+            <option value="">- pick one -</option>
             <option>Dixon</option><option>Amboy</option><option>Ashton</option>
             <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
             <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
@@ -950,7 +943,7 @@ pages['submit-event.html'] = shell({
 
 // ----- Submit book -----
 pages['submit-book.html'] = shell({
-  title: 'Suggest a book — Local Lee',
+  title: 'Suggest a book - Local Lee',
   description: 'Suggest a book for the Local Lee reading list. Books that fit the spirit of the project may be added.',
   canonical: '/submit/book',
   narrow: true,
@@ -987,7 +980,7 @@ pages['submit-book.html'] = shell({
 
 // ----- Submit aid resource -----
 pages['submit-aid-resource.html'] = shell({
-  title: 'Suggest a mutual-aid resource — Local Lee',
+  title: 'Suggest a mutual-aid resource - Local Lee',
   description: 'Suggest a food pantry, warming center, family resource, or other ongoing program for the Lee County mutual-aid directory.',
   canonical: '/submit/aid-resource',
   narrow: true,
@@ -1001,7 +994,7 @@ pages['submit-aid-resource.html'] = shell({
         <div class="form-row">
           <label for="category">Category *</label>
           <select id="category" name="category" required>
-            <option value="">— pick one —</option>
+            <option value="">- pick one -</option>
             <option>Food</option><option>Shelter</option><option>Family</option>
             <option>Health</option><option>Goods</option><option>Transportation</option>
             <option>Financial</option><option>Other</option>
@@ -1010,7 +1003,7 @@ pages['submit-aid-resource.html'] = shell({
         <div class="form-row">
           <label for="town">Town</label>
           <select id="town" name="town">
-            <option value="">— pick one —</option>
+            <option value="">- pick one -</option>
             <option>Dixon</option><option>Amboy</option><option>Ashton</option>
             <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
             <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
@@ -1046,7 +1039,7 @@ pages['submit-aid-resource.html'] = shell({
 
 // ----- Submit aid post (need or offer) -----
 pages['submit-aid-post.html'] = shell({
-  title: 'Post a need or offer — Local Lee',
+  title: 'Post a need or offer - Local Lee',
   description: 'Post a need or offer to the Local Lee mutual-aid board. Posts are reviewed before they appear and refresh every 30 days.',
   canonical: '/submit/aid-post',
   narrow: true,
@@ -1068,7 +1061,7 @@ pages['submit-aid-post.html'] = shell({
         <div class="form-row">
           <label for="category">Category</label>
           <select id="category" name="category">
-            <option value="">— pick one —</option>
+            <option value="">- pick one -</option>
             <option>Food</option><option>Shelter</option><option>Family</option>
             <option>Health</option><option>Goods</option><option>Tools</option>
             <option>Transportation</option><option>Skills/Time</option><option>Financial</option>
@@ -1078,7 +1071,7 @@ pages['submit-aid-post.html'] = shell({
         <div class="form-row">
           <label for="town">Town</label>
           <select id="town" name="town">
-            <option value="">— pick one —</option>
+            <option value="">- pick one -</option>
             <option>Dixon</option><option>Amboy</option><option>Ashton</option>
             <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
             <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
@@ -1120,32 +1113,82 @@ pages['submit-aid-post.html'] = shell({
 
 // ----- Admin -----
 pages['admin.html'] = shell({
-  title: 'Admin — Local Lee',
+  title: 'Admin - Local Lee',
   description: 'Local Lee admin dashboard.',
   canonical: '/admin',
   extraHead: '<meta name="robots" content="noindex">',
   main: `    <div class="page-head">
-      <h1>Admin queue</h1>
-      <p>Pending submissions awaiting review.</p>
+      <h1>Admin</h1>
+      <p>Review pending submissions, manage what\\'s already on the site, and update the brand mark.</p>
     </div>
     <div id="auth-gate" hidden>
-      <div class="notice error">You need to sign in as an administrator. <a href="/login?next=/admin">Sign in →</a></div>
+      <div class="notice error">You need to sign in as an administrator. <a href="/login?next=/admin">Sign in</a></div>
     </div>
     <div id="dash" hidden>
-      <section><h2>Businesses</h2><div id="q-businesses"></div></section>
-      <section><h2>Business claim requests</h2><div id="q-claims"></div></section>
-      <section><h2>Events</h2><div id="q-events"></div></section>
-      <section><h2>Books</h2><div id="q-books"></div></section>
-      <section><h2>Mutual aid — resources</h2><div id="q-aid-resources"></div></section>
-      <section><h2>Mutual aid — needs &amp; offers</h2><div id="q-aid-posts"></div></section>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-which="queue">Pending queue</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="manage">Manage</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="logo">Logo</button>
+      </div>
+
+      <div id="panel-queue" class="panel">
+        <section><h2>Businesses</h2><div id="q-businesses"></div></section>
+        <section><h2>Business claim requests</h2><div id="q-claims"></div></section>
+        <section><h2>Events</h2><div id="q-events"></div></section>
+        <section><h2>Books</h2><div id="q-books"></div></section>
+        <section><h2>Mutual aid: resources</h2><div id="q-aid-resources"></div></section>
+        <section><h2>Mutual aid: needs &amp; offers</h2><div id="q-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-manage" class="panel" hidden>
+        <p class="dim small">Everything on the site, regardless of status. Use the delete button to remove a record permanently.</p>
+        <section><h2>Businesses</h2><div id="m-businesses"></div></section>
+        <section><h2>Events</h2><div id="m-events"></div></section>
+        <section><h2>Books</h2><div id="m-books"></div></section>
+        <section><h2>Book comments</h2><div id="m-comments"></div></section>
+        <section><h2>Mutual aid: resources</h2><div id="m-aid-resources"></div></section>
+        <section><h2>Mutual aid: needs &amp; offers</h2><div id="m-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-logo" class="panel" hidden>
+        <h2>Brand mark</h2>
+        <p>This image appears in the header on every page (and in the footer of social previews). PNG, JPEG, SVG, WebP, or GIF, up to 1 MB. Square images look best.</p>
+        <div class="card" style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:center">
+          <img id="logo-preview" src="/brand-mark" alt="Current brand mark" style="width:96px;height:96px;border:1px solid var(--rule);background:var(--cream);border-radius:6px;padding:6px">
+          <form id="logo-form" style="flex:1 1 240px">
+            <div class="form-row">
+              <label for="logo-file">Choose a new image</label>
+              <input id="logo-file" type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif">
+            </div>
+            <button type="submit" class="btn">Upload</button>
+            <button type="button" class="btn btn-secondary" id="logo-reset">Reset to default</button>
+            <div id="logo-msg" class="notice small" hidden></div>
+          </form>
+        </div>
+      </div>
     </div>`,
   extraScript: `<script>
+    function showPanel(which) {
+      document.querySelectorAll('.tab').forEach(t => t.setAttribute('aria-selected', t.dataset.which === which ? 'true' : 'false'));
+      document.querySelectorAll('.panel').forEach(p => p.hidden = true);
+      document.getElementById('panel-' + which).hidden = false;
+    }
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => showPanel(t.dataset.which)));
+
     function row(label, body, actions) {
       return \`<article class="card" style="margin-bottom:1em">
         <div class="meta">\${label}</div>
         \${body}
         <div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">\${actions}</div>
       </article>\`;
+    }
+
+    function statusTag(s) {
+      if (s === 'approved') return '<span class="tag" style="background:#d9e1c2;border-color:#a8b88a">Approved</span>';
+      if (s === 'pending') return '<span class="tag" style="background:#fff3cf;border-color:#c89c4d">Pending</span>';
+      if (s === 'rejected') return '<span class="tag" style="background:#f1d9c9;border-color:#d6a896">Rejected</span>';
+      if (s === 'expired') return '<span class="tag">Expired</span>';
+      return '<span class="tag">' + LL.escape(s || '') + '</span>';
     }
 
     async function action(type, id, decision, claim) {
@@ -1159,6 +1202,20 @@ pages['admin.html'] = shell({
     }
     window.action = action;
 
+    async function del(type, id, label) {
+      if (!confirm('Delete \"' + label + '\"? This cannot be undone.')) return;
+      try {
+        await LL.api('/api/admin/' + type + '/' + id + '/delete', { method: 'POST' });
+        await load();
+      } catch (err) { alert(err.message); }
+    }
+    window.del = del;
+
+    function delBtn(type, id, label) {
+      const safe = String(label).replace(/'/g, "\\\\'").replace(/"/g, '&quot;');
+      return '<button class="btn btn-barn" onclick="del(\\'' + type + '\\',' + id + ',\\'' + safe + '\\')">Delete</button>';
+    }
+
     async function load() {
       const me = (await LL.api('/api/me')).user;
       if (!me || me.role !== 'admin') {
@@ -1166,14 +1223,15 @@ pages['admin.html'] = shell({
         return;
       }
       document.getElementById('dash').hidden = false;
-      const q = await LL.api('/api/admin/queue');
 
+      // ---- queue ----
+      const q = await LL.api('/api/admin/queue');
       const businesses = q.businesses.filter(b => b.status === 'pending');
       const claims = q.businesses.filter(b => b.status === 'approved' && b.claim_status === 'claim_pending');
 
       document.getElementById('q-businesses').innerHTML = businesses.length
         ? businesses.map(b => row(
-            (b.category_name || '—') + (b.town ? ' · ' + b.town : ''),
+            (b.category_name || '-') + (b.town ? ' · ' + b.town : ''),
             '<h3 style="margin:0">' + LL.escape(b.name) + '</h3>' + (b.description ? '<p>' + LL.escape(b.description) + '</p>' : '') +
               '<p class="small">' + [b.address, b.phone, b.email, b.website].filter(Boolean).map(LL.escape).join(' · ') + '</p>',
             '<button class="btn btn-field" onclick="action(\\'business\\',' + b.id + ',\\'approve\\')">Approve</button>' +
@@ -1226,14 +1284,99 @@ pages['admin.html'] = shell({
             '<button class="btn btn-barn" onclick="action(\\'aidPost\\',' + p.id + ',\\'reject\\')">Reject</button>'
           )).join('')
         : '<p class="dim">Nothing pending.</p>';
+
+      // ---- manage (everything) ----
+      const all = await LL.api('/api/admin/all');
+      document.getElementById('m-businesses').innerHTML = all.businesses.length
+        ? all.businesses.map(b => row(
+            statusTag(b.status) + ' ' + (b.category_name ? LL.escape(b.category_name) : '') + (b.town ? ' · ' + LL.escape(b.town) : ''),
+            '<h3 style="margin:0"><a href="/directory/' + LL.escape(b.slug) + '">' + LL.escape(b.name) + '</a></h3>',
+            delBtn('business', b.id, b.name)
+          )).join('')
+        : '<p class="dim">No businesses.</p>';
+
+      document.getElementById('m-events').innerHTML = all.events.length
+        ? all.events.map(e => row(
+            statusTag(e.status) + ' ' + LL.escape(LL.formatDate(e.starts_at)) + (e.town ? ' · ' + LL.escape(e.town) : ''),
+            '<h3 style="margin:0"><a href="/events/' + LL.escape(e.slug) + '">' + LL.escape(e.title) + '</a></h3>',
+            delBtn('event', e.id, e.title)
+          )).join('')
+        : '<p class="dim">No events.</p>';
+
+      document.getElementById('m-books').innerHTML = all.books.length
+        ? all.books.map(b => row(
+            statusTag(b.status) + (b.curated ? ' · <span class="tag">Curated</span>' : '') + (b.author ? ' · ' + LL.escape(b.author) : '') + (b.year ? ' · ' + LL.escape(b.year) : ''),
+            '<h3 style="margin:0"><a href="/literature/' + LL.escape(b.slug) + '">' + LL.escape(b.title) + '</a></h3>',
+            delBtn('book', b.id, b.title)
+          )).join('')
+        : '<p class="dim">No books.</p>';
+
+      document.getElementById('m-comments').innerHTML = all.bookComments.length
+        ? all.bookComments.map(c => row(
+            'On <a href="/literature/' + LL.escape(c.book_slug) + '">' + LL.escape(c.book_title) + '</a> by ' + LL.escape(c.display_name || c.email.split('@')[0]) + ' · ' + LL.escape(LL.formatDate(c.created_at)),
+            '<p>' + LL.escape(c.body) + '</p>',
+            delBtn('book-comment', c.id, c.body.slice(0, 40))
+          )).join('')
+        : '<p class="dim">No comments yet.</p>';
+
+      document.getElementById('m-aid-resources').innerHTML = all.aidResources.length
+        ? all.aidResources.map(r => row(
+            statusTag(r.status) + ' · ' + LL.escape(r.category) + (r.town ? ' · ' + LL.escape(r.town) : ''),
+            '<h3 style="margin:0">' + LL.escape(r.name) + '</h3>',
+            delBtn('aidResource', r.id, r.name)
+          )).join('')
+        : '<p class="dim">No resources.</p>';
+
+      document.getElementById('m-aid-posts').innerHTML = all.aidPosts.length
+        ? all.aidPosts.map(p => row(
+            statusTag(p.status) + ' · ' + (p.kind === 'need' ? 'Need' : 'Offer') + (p.category ? ' · ' + LL.escape(p.category) : '') + (p.town ? ' · ' + LL.escape(p.town) : ''),
+            '<h3 style="margin:0">' + LL.escape(p.title) + '</h3>',
+            delBtn('aidPost', p.id, p.title)
+          )).join('')
+        : '<p class="dim">No posts.</p>';
     }
+
+    // ---- logo upload ----
+    document.getElementById('logo-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = document.getElementById('logo-file').files[0];
+      if (!file) { LL.notice('#logo-msg', 'Pick a file first.', 'error'); return; }
+      if (file.size > 1024 * 1024) { LL.notice('#logo-msg', 'File is over 1 MB.', 'error'); return; }
+      const dataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+        r.readAsDataURL(file);
+      });
+      try {
+        await LL.api('/api/admin/logo', { method: 'POST', body: { data: dataUrl } });
+        document.getElementById('logo-preview').src = '/brand-mark?v=' + Date.now();
+        document.querySelectorAll('img.brand-mark').forEach(i => i.src = '/brand-mark?v=' + Date.now());
+        LL.notice('#logo-msg', 'Logo updated. The new brand mark will be live for visitors within a few minutes.', 'success');
+        document.getElementById('logo-file').value = '';
+      } catch (err) {
+        LL.notice('#logo-msg', err.message, 'error');
+      }
+    });
+    document.getElementById('logo-reset').addEventListener('click', async () => {
+      if (!confirm('Reset to the default brand mark?')) return;
+      try {
+        await LL.api('/api/admin/logo/reset', { method: 'POST' });
+        document.getElementById('logo-preview').src = '/brand-mark?v=' + Date.now();
+        document.querySelectorAll('img.brand-mark').forEach(i => i.src = '/brand-mark?v=' + Date.now());
+        LL.notice('#logo-msg', 'Reset to default.', 'success');
+      } catch (err) {
+        LL.notice('#logo-msg', err.message, 'error');
+      }
+    });
+
     load();
   </script>`,
 });
 
 // ----- 404 -----
 pages['404.html'] = shell({
-  title: 'Not found — Local Lee',
+  title: 'Not found - Local Lee',
   description: 'Page not found.',
   canonical: '/',
   narrow: true,
