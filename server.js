@@ -9,6 +9,42 @@ const SQLiteStore = require('connect-sqlite3')(session);
 const bcrypt = require('bcrypt');
 const Database = require('better-sqlite3');
 const altcha = require('altcha-lib');
+const sanitizeHtml = require('sanitize-html');
+
+// Allow-list for newsletter HTML. Wider than a comment field but well
+// short of "anything goes" — no inline event handlers, no <script>,
+// only http(s)/mailto/tel links, only image data: URIs are blocked.
+const NEWSLETTER_HTML = {
+  allowedTags: [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'p', 'br', 'hr',
+    'strong', 'em', 'b', 'i', 'u', 's', 'sub', 'sup',
+    'a', 'blockquote', 'code', 'pre',
+    'ul', 'ol', 'li',
+    'img', 'figure', 'figcaption',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'div', 'span',
+  ],
+  allowedAttributes: {
+    a: ['href', 'title', 'target', 'rel'],
+    img: ['src', 'alt', 'title', 'width', 'height'],
+    '*': ['class'],
+  },
+  allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+  allowedSchemesByTag: { img: ['http', 'https'] },
+  transformTags: {
+    a: (tag, attribs) => {
+      const href = attribs.href || '';
+      if (/^https?:\/\//i.test(href)) {
+        return {
+          tagName: 'a',
+          attribs: { ...attribs, target: '_blank', rel: 'noopener noreferrer' },
+        };
+      }
+      return { tagName: 'a', attribs };
+    },
+  },
+};
 
 // ----- Configuration -----
 const PORT = process.env.PORT || 8082;
@@ -1220,9 +1256,12 @@ app.get('/api/admin/newsletter', requireAdmin, (req, res) => {
 
 app.post('/api/admin/newsletter', requireAdmin, (req, res) => {
   const title = trim(req.body.title, 200);
-  const body = trim(req.body.body, 50000);
+  const rawBody = trim(req.body.body, 60000);
   if (!title) return res.status(400).json({ error: 'Title required.' });
-  if (!body) return res.status(400).json({ error: 'Body required.' });
+  if (!rawBody) return res.status(400).json({ error: 'Body required.' });
+  const body = sanitizeHtml(rawBody, NEWSLETTER_HTML);
+  if (!body.replace(/<[^>]+>/g, '').trim())
+    return res.status(400).json({ error: 'Body looks empty after stripping tags.' });
   const slug = uniqueSlug('newsletters', slugify(title));
   const status = req.body.publish ? 'published' : 'draft';
   const publishedAt = status === 'published' ? Math.floor(Date.now() / 1000) : null;
@@ -1240,7 +1279,8 @@ app.post('/api/admin/newsletter/:id', requireAdmin, (req, res) => {
   const existing = db.prepare('SELECT * FROM newsletters WHERE id = ?').get(id);
   if (!existing) return res.status(404).json({ error: 'Not found.' });
   const title = trim(req.body.title, 200) || existing.title;
-  const body = trim(req.body.body, 50000) || existing.body;
+  const rawBody = trim(req.body.body, 60000);
+  const body = rawBody ? sanitizeHtml(rawBody, NEWSLETTER_HTML) : existing.body;
   let status = existing.status;
   let publishedAt = existing.published_at;
   if (req.body.publish === true) {

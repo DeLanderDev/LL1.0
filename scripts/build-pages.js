@@ -67,11 +67,13 @@ const FOOTER = `<footer class="site-footer">
     <p class="fine-print">© <span id="year"></span> Local Lee - Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
   </footer>`;
 
-// AltCha widget snippet to drop inside any form. The widget renders a
-// short proof-of-work challenge and adds a hidden input named "altcha"
-// to the form on completion, which our submit handlers pick up
-// automatically via f.elements.
-const ALTCHA = `<altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>`;
+// AltCha widget. auto="onload" runs the proof-of-work as soon as the
+// page loads so that by the time the visitor finishes filling out the
+// form, the hidden "altcha" input already has its solution and our
+// existing submit handlers (which iterate f.elements) pick it up
+// without needing to coordinate with the widget's submit interception.
+const ALTCHA = `<noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>`;
 
 function shell(opts) {
   const {
@@ -1161,7 +1163,7 @@ pages['admin.html'] = shell({
   title: 'Admin - Local Lee',
   description: 'Local Lee admin dashboard.',
   canonical: '/admin',
-  extraHead: '<meta name="robots" content="noindex">',
+  extraHead: '<meta name="robots" content="noindex"><link rel="stylesheet" href="/css/quill.snow.css"><script src="/js/quill.min.js" defer></script>',
   main: `    <div class="page-head">
       <h1>Admin</h1>
       <p>Review pending submissions, manage what\\'s already on the site, and update the brand mark.</p>
@@ -1203,7 +1205,11 @@ pages['admin.html'] = shell({
         <form id="nl-form" class="card" novalidate>
           <input type="hidden" id="nl-id" value="">
           <div class="form-row"><label for="nl-title">Title</label><input id="nl-title" type="text" maxlength="200" required></div>
-          <div class="form-row"><label for="nl-body">Body</label><textarea id="nl-body" rows="14" maxlength="50000" required></textarea><p class="hint">Plain text. Blank lines start a new paragraph.</p></div>
+          <div class="form-row">
+            <label for="nl-editor">Body</label>
+            <div id="nl-editor" style="min-height:320px;background:#fff"></div>
+            <p class="hint">Use the toolbar to format - headings, lists, links, images. The HTML is sanitized server-side before saving.</p>
+          </div>
           <button type="submit" class="btn">Save draft</button>
           <button type="button" class="btn btn-field" id="nl-publish">Save &amp; publish</button>
           <button type="button" class="btn btn-secondary" id="nl-clear">New post</button>
@@ -1455,13 +1461,35 @@ pages['admin.html'] = shell({
           )).join('')
         : '<p class="dim">No topic suggestions waiting.</p>';
     }
+    // Quill editor for newsletter body. Initialised lazily because the
+    // Quill script is loaded with defer.
+    let nlQuill = null;
+    function initQuillIfReady() {
+      if (nlQuill || typeof Quill === 'undefined') return;
+      nlQuill = new Quill('#nl-editor', {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            [{ header: [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            ['blockquote', 'code-block'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            ['link', 'image'],
+            ['clean'],
+          ],
+        },
+      });
+    }
+    window.addEventListener('load', initQuillIfReady);
+
     window.nlEdit = async function (id) {
+      initQuillIfReady();
       const data = await LL.api('/api/admin/newsletter');
       const p = data.posts.find(x => x.id === id);
       if (!p) return;
       document.getElementById('nl-id').value = p.id;
       document.getElementById('nl-title').value = p.title;
-      document.getElementById('nl-body').value = p.body;
+      if (nlQuill) nlQuill.root.innerHTML = p.body || '';
       document.getElementById('panel-newsletter').scrollIntoView({ behavior: 'smooth' });
     };
     window.nlPublish = async function (id, publish) {
@@ -1482,13 +1510,15 @@ pages['admin.html'] = shell({
     document.getElementById('nl-clear').addEventListener('click', () => {
       document.getElementById('nl-id').value = '';
       document.getElementById('nl-title').value = '';
-      document.getElementById('nl-body').value = '';
+      if (nlQuill) nlQuill.root.innerHTML = '';
     });
     async function nlSave(publish) {
+      initQuillIfReady();
       const id = document.getElementById('nl-id').value;
+      const html = nlQuill ? nlQuill.root.innerHTML : '';
       const body = {
         title: document.getElementById('nl-title').value,
-        body: document.getElementById('nl-body').value,
+        body: html,
       };
       if (typeof publish === 'boolean') body.publish = publish;
       try {
@@ -1497,7 +1527,7 @@ pages['admin.html'] = shell({
         LL.notice('#nl-msg', publish ? 'Published.' : 'Saved.', 'success');
         document.getElementById('nl-id').value = '';
         document.getElementById('nl-title').value = '';
-        document.getElementById('nl-body').value = '';
+        if (nlQuill) nlQuill.root.innerHTML = '';
         await loadNewsletter();
       } catch (err) { LL.notice('#nl-msg', err.message, 'error'); }
     }
@@ -1615,7 +1645,7 @@ pages['newsletter.html'] = shell({
             <li>
               <h3 style="margin:0"><a href="/newsletter/\${LL.escape(p.slug)}">\${LL.escape(p.title)}</a></h3>
               <div class="meta">\${LL.escape(LL.formatDay(p.published_at || p.created_at))}\${p.author_name ? ' &middot; by ' + LL.escape(p.author_name) : ''}</div>
-              <p>\${LL.escape(p.excerpt || '')}\${(p.excerpt || '').length >= 280 ? '...' : ''}</p>
+              <p>\${LL.escape((p.excerpt || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 240))}\${(p.excerpt || '').length >= 280 ? '...' : ''}</p>
             </li>\`).join('');
         }
       } catch (err) { list.innerHTML = '<li class="dim">Could not load posts.</li>'; }
@@ -1680,14 +1710,20 @@ pages['newsletter-post.html'] = shell({
         ldEl.type = 'application/ld+json';
         ldEl.textContent = JSON.stringify(ld);
         document.head.appendChild(ldEl);
-        const paragraphs = post.body.split(/\\n{2,}/).map(p => '<p>' + LL.escape(p).replace(/\\n/g, '<br>') + '</p>').join('');
+        // post.body is server-sanitized HTML; render it directly. Old
+        // plain-text posts (from before the rich-text editor) still
+        // render fine - line breaks are preserved by the wrapper below.
+        const looksLikeHtml = /<[a-z][\\s\\S]*>/i.test(post.body || '');
+        const bodyHtml = looksLikeHtml
+          ? post.body
+          : '<p>' + LL.escape(post.body || '').replace(/\\n{2,}/g, '</p><p>').replace(/\\n/g, '<br>') + '</p>';
         root.innerHTML = \`
           <div class="page-head">
             <p class="small dim"><a href="/newsletter">&larr; All posts</a></p>
             <h1>\${LL.escape(post.title)}</h1>
             <p class="meta">\${LL.escape(LL.formatDay(post.published_at || post.created_at))}\${post.author_name ? ' &middot; by ' + LL.escape(post.author_name) : ''}</p>
           </div>
-          <div class="prose">\${paragraphs}</div>
+          <article class="prose newsletter-body">\${bodyHtml}</article>
         \`;
         renderComments(data.comments);
         document.getElementById('comments-section').hidden = false;
@@ -1785,7 +1821,7 @@ pages['discussion.html'] = shell({
               </div>
             </li>\`).join('');
         }
-      } catch (err) { ul.innerHTML = '<li class="dim">Could not load threads.</li>'; }
+      } catch (err) { ul.innerHTML = '<li class="dim">Could not load threads: ' + LL.escape(err.message || err) + '</li>'; }
       ul.setAttribute('aria-busy', 'false');
     })();
   </script>`,
@@ -1825,8 +1861,12 @@ pages['discussion-new.html'] = shell({
       for (const el of f.elements) if (el.name) body[el.name] = el.value;
       try {
         const r = await LL.api('/api/threads', { method: 'POST', body });
-        location.href = '/discussion/' + r.slug;
-      } catch (err) { LL.notice('#notice', err.message, 'error'); }
+        if (r && r.slug) {
+          location.href = '/discussion/' + r.slug;
+        } else {
+          LL.notice('#notice', 'Posted, but the server did not return a slug. Refresh the discussion page to find your thread.', 'error');
+        }
+      } catch (err) { LL.notice('#notice', err.message || String(err), 'error'); }
     });
   </script>`,
 });
@@ -1898,7 +1938,7 @@ pages['thread.html'] = shell({
         }
         root.setAttribute('aria-busy', 'false');
       } catch (err) {
-        root.innerHTML = '<p class="dim">Thread not found. <a href="/discussion">Back to discussion.</a></p>';
+        root.innerHTML = '<p class="dim">Could not load thread: ' + LL.escape(err.message || err) + '. <a href="/discussion">Back to discussion.</a></p>';
       }
     }
 

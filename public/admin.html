@@ -14,7 +14,7 @@
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
   
-  <meta name="robots" content="noindex">
+  <meta name="robots" content="noindex"><link rel="stylesheet" href="/css/quill.snow.css"><script src="/js/quill.min.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -81,7 +81,11 @@
         <form id="nl-form" class="card" novalidate>
           <input type="hidden" id="nl-id" value="">
           <div class="form-row"><label for="nl-title">Title</label><input id="nl-title" type="text" maxlength="200" required></div>
-          <div class="form-row"><label for="nl-body">Body</label><textarea id="nl-body" rows="14" maxlength="50000" required></textarea><p class="hint">Plain text. Blank lines start a new paragraph.</p></div>
+          <div class="form-row">
+            <label for="nl-editor">Body</label>
+            <div id="nl-editor" style="min-height:320px;background:#fff"></div>
+            <p class="hint">Use the toolbar to format - headings, lists, links, images. The HTML is sanitized server-side before saving.</p>
+          </div>
           <button type="submit" class="btn">Save draft</button>
           <button type="button" class="btn btn-field" id="nl-publish">Save &amp; publish</button>
           <button type="button" class="btn btn-secondary" id="nl-clear">New post</button>
@@ -371,13 +375,35 @@
           )).join('')
         : '<p class="dim">No topic suggestions waiting.</p>';
     }
+    // Quill editor for newsletter body. Initialised lazily because the
+    // Quill script is loaded with defer.
+    let nlQuill = null;
+    function initQuillIfReady() {
+      if (nlQuill || typeof Quill === 'undefined') return;
+      nlQuill = new Quill('#nl-editor', {
+        theme: 'snow',
+        modules: {
+          toolbar: [
+            [{ header: [1, 2, 3, false] }],
+            ['bold', 'italic', 'underline', 'strike'],
+            ['blockquote', 'code-block'],
+            [{ list: 'ordered' }, { list: 'bullet' }],
+            ['link', 'image'],
+            ['clean'],
+          ],
+        },
+      });
+    }
+    window.addEventListener('load', initQuillIfReady);
+
     window.nlEdit = async function (id) {
+      initQuillIfReady();
       const data = await LL.api('/api/admin/newsletter');
       const p = data.posts.find(x => x.id === id);
       if (!p) return;
       document.getElementById('nl-id').value = p.id;
       document.getElementById('nl-title').value = p.title;
-      document.getElementById('nl-body').value = p.body;
+      if (nlQuill) nlQuill.root.innerHTML = p.body || '';
       document.getElementById('panel-newsletter').scrollIntoView({ behavior: 'smooth' });
     };
     window.nlPublish = async function (id, publish) {
@@ -398,13 +424,15 @@
     document.getElementById('nl-clear').addEventListener('click', () => {
       document.getElementById('nl-id').value = '';
       document.getElementById('nl-title').value = '';
-      document.getElementById('nl-body').value = '';
+      if (nlQuill) nlQuill.root.innerHTML = '';
     });
     async function nlSave(publish) {
+      initQuillIfReady();
       const id = document.getElementById('nl-id').value;
+      const html = nlQuill ? nlQuill.root.innerHTML : '';
       const body = {
         title: document.getElementById('nl-title').value,
-        body: document.getElementById('nl-body').value,
+        body: html,
       };
       if (typeof publish === 'boolean') body.publish = publish;
       try {
@@ -413,7 +441,7 @@
         LL.notice('#nl-msg', publish ? 'Published.' : 'Saved.', 'success');
         document.getElementById('nl-id').value = '';
         document.getElementById('nl-title').value = '';
-        document.getElementById('nl-body').value = '';
+        if (nlQuill) nlQuill.root.innerHTML = '';
         await loadNewsletter();
       } catch (err) { LL.notice('#nl-msg', err.message, 'error'); }
     }

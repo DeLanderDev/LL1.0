@@ -115,6 +115,7 @@
           `<a class="who" href="/profile" title="Edit your profile">` +
           `<img class="avatar" src="/avatar/${user.id}" alt="" width="28" height="28">` +
           ` ${LL.escape(name)}</a>` +
+          ' <a href="/profile">Profile</a>' +
           adminLink +
           ' <button type="button" class="btn btn-secondary" id="btn-logout">Sign out</button>';
         document.getElementById('btn-logout').addEventListener('click', async () => {

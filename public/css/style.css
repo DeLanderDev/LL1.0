@@ -528,7 +528,67 @@ altcha-widget {
   --altcha-border-radius: 3px;
   display: block;
   margin: 0.8em 0 1em;
+  max-width: 480px;
+}
+:not(:defined) > altcha-widget,
+altcha-widget:not(:defined) {
+  /* Element exists but the script hasn't registered the custom
+     element yet. Show a placeholder so the form doesn't appear empty. */
+  display: block;
+  border: 1px dashed var(--rule);
+  border-radius: 3px;
+  padding: 0.6em 0.9em;
+  background: var(--parchment-deep);
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+altcha-widget:not(:defined)::before {
+  content: 'Loading verification…';
+}
+
+/* Newsletter body */
+.newsletter-body {
+  font-size: 1.08rem;
+  line-height: 1.7;
+}
+.newsletter-body h1,
+.newsletter-body h2,
+.newsletter-body h3 {
+  margin-top: 1.5em;
+  margin-bottom: 0.4em;
+}
+.newsletter-body h2 { font-size: 1.5rem; }
+.newsletter-body h3 { font-size: 1.2rem; }
+.newsletter-body p { margin-bottom: 1em; }
+.newsletter-body img {
   max-width: 100%;
+  height: auto;
+  border-radius: 3px;
+}
+.newsletter-body blockquote {
+  border-left: 3px solid var(--wheat);
+  padding: 0.2em 0 0.2em 1em;
+  margin: 1em 0;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+.newsletter-body pre {
+  background: var(--parchment-deep);
+  padding: 0.8em 1em;
+  border-radius: 3px;
+  overflow-x: auto;
+  font-size: 0.95rem;
+}
+.newsletter-body code {
+  background: var(--parchment-deep);
+  padding: 0.1em 0.4em;
+  border-radius: 2px;
+  font-size: 0.95em;
+}
+.newsletter-body a { color: var(--barn); }
+.newsletter-body ul,
+.newsletter-body ol {
+  margin: 0.6em 0 1em 1.4em;
 }
 
 /* Print */
