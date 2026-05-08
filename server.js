@@ -309,6 +309,13 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '256kb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
+// Secure cookies require HTTPS, so they have to be driven independently
+// from NODE_ENV — a production-mode app sitting behind plain HTTP (e.g.
+// reachable directly on a droplet port before nginx + certbot are in
+// place) can't set Secure cookies, or the browser silently drops them
+// and nobody can stay logged in. Default off; flip on once HTTPS is up.
+const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+
 app.use(
   session({
     store: new SQLiteStore({ db: 'sessions.db', dir: DATA_DIR }),
@@ -318,7 +325,7 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: COOKIE_SECURE,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     },
   })
