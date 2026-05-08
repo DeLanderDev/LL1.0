@@ -1,4 +1,4 @@
-/* Local Lee — earthy / agrarian theme */
+/* Local Lee - earthy / agrarian theme */
 
 :root {
   --parchment: #f5ecd7;
@@ -183,6 +183,8 @@ label {
   width: 44px;
   height: 44px;
   flex: 0 0 44px;
+  object-fit: contain;
+  border-radius: 4px;
 }
 .brand-name {
   font-family: var(--display);

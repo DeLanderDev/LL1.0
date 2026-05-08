@@ -250,7 +250,7 @@ function seed() {
         'small-is-beautiful',
         'E. F. Schumacher',
         '1973',
-        'A study of economics as if people mattered — appropriate scale, appropriate technology, durable work.',
+        'A study of economics as if people mattered - appropriate scale, appropriate technology, durable work.',
         'Practical questions about what size of enterprise actually serves a place.',
       ],
       [
@@ -267,13 +267,13 @@ function seed() {
         'Robert D. Putnam',
         '2000',
         'A landmark account of the decline of civic and social life in American communities.',
-        'Names what we have lost in clear terms — and where to start rebuilding.',
+        'Names what we have lost in clear terms - and where to start rebuilding.',
       ],
       [
         'The Death and Life of Great American Main Streets',
         'main-streets',
         'Various',
-        '—',
+        '-',
         'A working anthology on small-town main streets, locally owned shops, and the economics of staying.',
         'Reading list for anyone thinking about Dixon, Amboy, or Ashton five years from now.',
       ],
@@ -293,7 +293,7 @@ function seed() {
       ['Lee County Food Pantry Network', 'lee-county-food-pantries', 'Food', 'A directory entry for the food pantries serving Lee County. Contact your local pantry directly for hours and intake.', 'Dixon'],
       ['Warming Center (Winter)', 'warming-center', 'Shelter', 'Seasonal warming center information for cold-weather emergencies.', 'Dixon'],
       ['Diaper & Formula Bank', 'diaper-formula-bank', 'Family', 'Diapers, wipes, and formula for families in need.', 'Dixon'],
-      ['Tool Library (Informal)', 'tool-library', 'Goods', 'Neighbors lending neighbors — borrow what you need to fix what is yours.', 'Amboy'],
+      ['Tool Library (Informal)', 'tool-library', 'Goods', 'Neighbors lending neighbors - borrow what you need to fix what is yours.', 'Amboy'],
       ['Ride Share Board', 'ride-share', 'Transportation', 'Posting board for rides to medical appointments, grocery runs, and church.', 'Lee County'],
     ];
     for (const r of seeds) insertAid.run(...r);
@@ -306,11 +306,14 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-app.use(express.json({ limit: '256kb' }));
+// 2 MB so admin logo uploads (sent as base64 data URLs) fit. Regular
+// form posts are far smaller; the larger ceiling only matters when the
+// request actually carries a big JSON payload.
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // Secure cookies require HTTPS, so they have to be driven independently
-// from NODE_ENV — a production-mode app sitting behind plain HTTP (e.g.
+// from NODE_ENV - a production-mode app sitting behind plain HTTP (e.g.
 // reachable directly on a droplet port before nginx + certbot are in
 // place) can't set Secure cookies, or the browser silently drops them
 // and nobody can stay logged in. Default off; flip on once HTTPS is up.
@@ -773,7 +776,7 @@ app.post('/api/contact', (req, res) => {
   const email = trim(req.body.email, 254);
   const message = trim(req.body.message, 4000);
   if (!name || !message) return res.status(400).json({ error: 'Name and message required.' });
-  // Persist as an aid post in admin queue? No — log.
+  // Persist as an aid post in admin queue? No - log.
   console.log(`[contact] ${new Date().toISOString()} from=${name}<${email}>: ${message}`);
   res.json({ ok: true });
 });
@@ -839,6 +842,164 @@ app.post('/api/admin/business/:id/claim/reject', requireAdmin, (req, res) => {
   db.prepare(
     "UPDATE businesses SET claim_status = 'unclaimed', owner_user_id = NULL WHERE id = ?"
   ).run(id);
+  res.json({ ok: true });
+});
+
+// Admin delete: hard-removes a row regardless of status. Cascades follow
+// the FK definitions (event RSVPs, book comments, etc.).
+app.post('/api/admin/:type/:id/delete', requireAdmin, (req, res) => {
+  const table = APPROVABLE[req.params.type];
+  if (!table) return res.status(400).json({ error: 'Unknown type.' });
+  const id = parseInt(req.params.id, 10);
+  const info = db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+  if (info.changes === 0) return res.status(404).json({ error: 'Not found.' });
+  res.json({ ok: true });
+});
+
+// Delete a single book comment.
+app.post('/api/admin/book-comment/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  db.prepare('DELETE FROM book_comments WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+// Lists of approved content for the admin "Manage" view.
+app.get('/api/admin/all', requireAdmin, (req, res) => {
+  const businesses = db
+    .prepare(
+      `SELECT b.id, b.name, b.slug, b.town, b.status, b.claim_status,
+              c.name AS category_name
+       FROM businesses b LEFT JOIN categories c ON c.id = b.category_id
+       ORDER BY b.created_at DESC`
+    )
+    .all();
+  const events = db
+    .prepare(
+      `SELECT id, title, slug, town, starts_at, status FROM events
+       ORDER BY starts_at DESC`
+    )
+    .all();
+  const books = db
+    .prepare(
+      `SELECT id, title, slug, author, year, curated, status FROM books
+       ORDER BY curated DESC, created_at DESC`
+    )
+    .all();
+  const aidResources = db
+    .prepare(
+      `SELECT id, name, slug, category, town, status FROM aid_resources
+       ORDER BY created_at DESC`
+    )
+    .all();
+  const aidPosts = db
+    .prepare(
+      `SELECT id, kind, title, town, category, status, expires_at, created_at
+       FROM aid_posts ORDER BY created_at DESC`
+    )
+    .all();
+  const bookComments = db
+    .prepare(
+      `SELECT bc.id, bc.body, bc.created_at, b.title AS book_title, b.slug AS book_slug,
+              u.email, u.display_name
+       FROM book_comments bc
+       JOIN books b ON b.id = bc.book_id
+       JOIN users u ON u.id = bc.user_id
+       ORDER BY bc.created_at DESC LIMIT 200`
+    )
+    .all();
+  res.json({ businesses, events, books, aidResources, aidPosts, bookComments });
+});
+
+// ----- Brand mark (logo) -----
+const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_LOGO_MIMES = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/svg+xml': 'svg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+};
+
+const DEFAULT_BRAND_SVG = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Local Lee">
+  <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+  <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+  <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+  <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+  <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+  <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+</svg>
+`;
+
+function logoMeta() {
+  try {
+    return JSON.parse(
+      fs.readFileSync(path.join(UPLOAD_DIR, 'logo.json'), 'utf8')
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+app.get('/brand-mark', (req, res) => {
+  const meta = logoMeta();
+  if (meta) {
+    const filePath = path.join(UPLOAD_DIR, meta.file);
+    if (fs.existsSync(filePath)) {
+      res.set('Cache-Control', 'public, max-age=300');
+      res.set('Content-Type', meta.mime);
+      return fs.createReadStream(filePath).pipe(res);
+    }
+  }
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.set('Content-Type', 'image/svg+xml; charset=utf-8');
+  res.send(DEFAULT_BRAND_SVG);
+});
+
+app.get('/api/admin/logo', requireAdmin, (req, res) => {
+  res.json({ logo: logoMeta() });
+});
+
+app.post('/api/admin/logo', requireAdmin, (req, res) => {
+  const dataUrl = req.body && req.body.data;
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:'))
+    return res.status(400).json({ error: 'Send a base64 data URL in `data`.' });
+  const m = dataUrl.match(/^data:([\w/+\-.]+);base64,(.+)$/);
+  if (!m) return res.status(400).json({ error: 'Malformed data URL.' });
+  const mime = m[1].toLowerCase();
+  const ext = ALLOWED_LOGO_MIMES[mime];
+  if (!ext)
+    return res
+      .status(400)
+      .json({ error: 'Unsupported image type. Use PNG, JPEG, SVG, WebP, or GIF.' });
+  let buf;
+  try {
+    buf = Buffer.from(m[2], 'base64');
+  } catch (_) {
+    return res.status(400).json({ error: 'Invalid base64.' });
+  }
+  if (buf.length > 1024 * 1024)
+    return res.status(413).json({ error: 'Logo must be 1 MB or smaller.' });
+  // Wipe any earlier logo files so we don't accumulate orphans.
+  for (const e of new Set(Object.values(ALLOWED_LOGO_MIMES))) {
+    try { fs.unlinkSync(path.join(UPLOAD_DIR, 'logo.' + e)); } catch (_) {}
+  }
+  const filename = 'logo.' + ext;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
+  fs.writeFileSync(
+    path.join(UPLOAD_DIR, 'logo.json'),
+    JSON.stringify({ file: filename, mime, updated: Date.now() })
+  );
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/logo/reset', requireAdmin, (req, res) => {
+  for (const e of new Set(Object.values(ALLOWED_LOGO_MIMES))) {
+    try { fs.unlinkSync(path.join(UPLOAD_DIR, 'logo.' + e)); } catch (_) {}
+  }
+  try { fs.unlinkSync(path.join(UPLOAD_DIR, 'logo.json')); } catch (_) {}
   res.json({ ok: true });
 });
 

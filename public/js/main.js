@@ -1,4 +1,4 @@
-// Local Lee — shared client-side helpers and auth wiring.
+// Local Lee - shared client-side helpers and auth wiring.
 (function () {
   'use strict';
 
