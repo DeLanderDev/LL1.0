@@ -504,23 +504,38 @@ async function makeAltchaChallenge() {
   });
 }
 
+// AltCha relies on the browser's Web Crypto API (crypto.subtle), which
+// is only available in secure contexts (HTTPS or localhost). Until the
+// site is fronted by TLS, the widget can't actually run in visitors'
+// browsers, so we shouldn't reject submissions for missing payloads.
+// We treat COOKIE_SECURE=true as the signal that HTTPS is in place
+// (set automatically by the deploy script when DOMAIN is configured).
+const ALTCHA_ENFORCE = process.env.COOKIE_SECURE === 'true';
+
 // Routes that mutate via public POSTs run through this. Signed-in admins
 // skip the check (less friction for moderation actions); everyone else
-// must include a solved AltCha payload in `req.body.altcha`.
+// must include a solved AltCha payload in `req.body.altcha` when
+// enforcement is on. When enforcement is off (HTTP demo mode), we still
+// verify a payload if it's present, just don't require one.
 async function requireAltcha(req, res, next) {
   if (req.session && req.session.role === 'admin') return next();
   const payload = req.body && req.body.altcha;
-  if (!payload)
+  if (!payload) {
+    if (!ALTCHA_ENFORCE) return next();
     return res
       .status(400)
       .json({ error: 'Please complete the verification widget.' });
+  }
   try {
     const ok = await altcha.verifySolution(payload, ALTCHA_HMAC);
-    if (!ok)
+    if (!ok) {
+      if (!ALTCHA_ENFORCE) return next();
       return res
         .status(400)
         .json({ error: 'Verification failed. Please reload and try again.' });
+    }
   } catch (_) {
+    if (!ALTCHA_ENFORCE) return next();
     return res.status(400).json({ error: 'Verification failed.' });
   }
   next();

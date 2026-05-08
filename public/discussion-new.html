@@ -51,7 +51,7 @@
       <div class="form-row"><label for="title">Title *</label><input id="title" name="title" type="text" required maxlength="200"></div>
       <div class="form-row"><label for="body">Your post *</label><textarea id="body" name="body" rows="8" required maxlength="8000"></textarea></div>
       <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
-      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
+      <altcha-widget class="altcha" challenge="/api/altcha/challenge" auto="onload" configuration='{"hideFooter":true}' strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
       <button type="submit" class="btn">Post thread</button>
       <div id="notice" class="notice" hidden></div>
     </form>
