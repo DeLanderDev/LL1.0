@@ -131,8 +131,31 @@
     }
   };
 
+  // Replace AltCha widgets with a friendly note when the page isn't
+  // running in a secure context (plain HTTP, file://, etc). The widget
+  // depends on Web Crypto, which is HTTPS-only - without this swap the
+  // visitor would see a red "Verification failed - secure context
+  // required" error from the widget. The server's requireAltcha is
+  // configured to soft-fail in the same condition, so the form still
+  // submits.
+  LL.handleInsecureAltcha = function () {
+    if (typeof window === 'undefined') return;
+    if (window.isSecureContext) return;
+    document.querySelectorAll('altcha-widget').forEach((w) => {
+      const note = document.createElement('div');
+      note.className = 'notice small';
+      note.style.maxWidth = '480px';
+      note.innerHTML =
+        '<strong>Bot verification is paused.</strong> ' +
+        'It will turn on automatically once the site is on HTTPS. ' +
+        'Submissions are still moderated by hand before they appear.';
+      w.replaceWith(note);
+    });
+  };
+
   document.addEventListener('DOMContentLoaded', () => {
     LL.markCurrent();
     LL.refreshAccountNav();
+    LL.handleInsecureAltcha();
   });
 })();

@@ -47,7 +47,7 @@
       <form id="reply-form" class="card" hidden>
         <div class="form-row"><label for="r-body">Reply</label><textarea id="r-body" name="body" rows="4" maxlength="8000" required></textarea></div>
         <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
-      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
+      <altcha-widget class="altcha" challenge="/api/altcha/challenge" auto="onload" configuration='{"hideFooter":true}' strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
         <button type="submit" class="btn">Post reply</button>
         <div id="r-notice" class="notice small" hidden></div>
       </form>
