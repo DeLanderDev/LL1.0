@@ -1,0 +1,9 @@
+node_modules/
+*.log
+.env
+.DS_Store
+data/locallee.db
+data/sessions.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Business — Local Lee</title>
+  <meta name="description" content="A locally owned business in Lee County, Illinois.">
+  <link rel="canonical" href="https://locallee.org/directory">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Business — Local Lee">
+  <meta property="og:description" content="A locally owned business in Lee County, Illinois.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/directory">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <article id="biz" aria-busy="true">
+      <p class="dim">Loading…</p>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    const slug = location.pathname.split('/').filter(Boolean).pop();
+    const root = document.getElementById('biz');
+    (async () => {
+      try {
+        const { business: b } = await LL.api('/api/businesses/' + encodeURIComponent(slug));
+        document.title = b.name + ' — Local Lee';
+        const ld = {
+          '@context': 'https://schema.org', '@type': 'LocalBusiness',
+          name: b.name, description: b.description || undefined,
+          telephone: b.phone || undefined, email: b.email || undefined,
+          url: b.website || undefined,
+          address: b.address ? { '@type': 'PostalAddress', streetAddress: b.address, addressLocality: b.town || undefined, addressRegion: 'IL' } : undefined
+        };
+        const ldEl = document.createElement('script');
+        ldEl.type = 'application/ld+json';
+        ldEl.textContent = JSON.stringify(ld);
+        document.head.appendChild(ldEl);
+        root.innerHTML = `
+          <div class="page-head">
+            <p class="small dim"><a href="/directory">← Directory</a>${b.category_slug ? ' · <a href="/directory?category=' + LL.escape(b.category_slug) + '">' + LL.escape(b.category_name) + '</a>' : ''}</p>
+            <h1>${LL.escape(b.name)}</h1>
+            <p>${b.town ? LL.escape(b.town) + ' · ' : ''}${b.claim_status === 'claimed' ? '<span class="tag">Owner-verified</span>' : ''}</p>
+          </div>
+          <div class="two-col">
+            <div class="prose">
+              <p>${LL.escape(b.description || '')}</p>
+              ${b.hours ? '<p><strong>Hours:</strong> ' + LL.escape(b.hours) + '</p>' : ''}
+            </div>
+            <aside class="card">
+              <h3>Contact</h3>
+              ${b.address ? '<p>' + LL.escape(b.address) + '</p>' : ''}
+              ${b.phone ? '<p>📞 <a href="tel:' + LL.escape(b.phone) + '">' + LL.escape(b.phone) + '</a></p>' : ''}
+              ${b.email ? '<p>✉ <a href="mailto:' + LL.escape(b.email) + '">' + LL.escape(b.email) + '</a></p>' : ''}
+              ${b.website ? '<p>🌐 <a href="' + LL.escape(b.website) + '" rel="noopener">' + LL.escape(b.website) + '</a></p>' : ''}
+              <hr>
+              <p class="small">Are you the owner? <button type="button" class="btn btn-secondary" id="claim-btn">Claim this listing</button></p>
+              <div id="claim-msg" class="notice small" hidden></div>
+            </aside>
+          </div>
+        `;
+        document.getElementById('claim-btn').addEventListener('click', async () => {
+          try {
+            await LL.api('/api/businesses/' + b.id + '/claim', { method: 'POST' });
+            LL.notice('#claim-msg', 'Claim submitted — an editor will follow up to verify.', 'success');
+          } catch (err) {
+            LL.notice('#claim-msg', err.message, 'error');
+          }
+        });
+        root.setAttribute('aria-busy', 'false');
+      } catch (err) {
+        root.innerHTML = '<p class="dim">This business could not be found. <a href="/directory">Back to the directory.</a></p>';
+        root.setAttribute('aria-busy', 'false');
+      }
+    })();
+  </script>
+</body>
+</html>

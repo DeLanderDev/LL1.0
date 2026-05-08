@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Post an event — Local Lee</title>
+  <meta name="description" content="Submit a community event happening in Lee County, Illinois. An editor reviews each one before posting.">
+  <link rel="canonical" href="https://locallee.org/submit/event">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Post an event — Local Lee">
+  <meta property="og:description" content="Submit a community event happening in Lee County, Illinois. An editor reviews each one before posting.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/submit/event">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main" class="narrow">
+    <div class="page-head">
+      <h1>Post an event</h1>
+      <p>Suppers, markets, work parties, school plays — anything happening in Lee County.</p>
+    </div>
+
+    <form id="form" class="card" novalidate>
+      <div class="form-row"><label for="title">Title *</label><input id="title" name="title" type="text" required maxlength="160"></div>
+      <div class="form-grid">
+        <div class="form-row"><label for="starts_at">Starts *</label><input id="starts_at" name="starts_at" type="datetime-local" required></div>
+        <div class="form-row"><label for="ends_at">Ends</label><input id="ends_at" name="ends_at" type="datetime-local"></div>
+        <div class="form-row">
+          <label for="town">Town</label>
+          <select id="town" name="town">
+            <option value="">— pick one —</option>
+            <option>Dixon</option><option>Amboy</option><option>Ashton</option>
+            <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
+            <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
+            <option>Harmon</option><option>Nelson</option><option>Steward</option>
+          </select>
+        </div>
+        <div class="form-row"><label for="location">Venue / address</label><input id="location" name="location" type="text" maxlength="200"></div>
+      </div>
+      <div class="form-row"><label for="description">Description</label><textarea id="description" name="description" rows="5" maxlength="4000"></textarea></div>
+      <div class="form-grid">
+        <div class="form-row"><label for="organizer">Hosted by</label><input id="organizer" name="organizer" type="text" maxlength="120"></div>
+        <div class="form-row"><label for="contact">Contact for questions</label><input id="contact" name="contact" type="text" maxlength="200"></div>
+      </div>
+      <button type="submit" class="btn">Submit for review</button>
+      <div id="notice" class="notice" hidden></div>
+    </form>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    function localToEpoch(v) { if (!v) return null; return Math.floor(new Date(v).getTime() / 1000); }
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      body.starts_at = localToEpoch(body.starts_at);
+      body.ends_at = localToEpoch(body.ends_at);
+      try {
+        await LL.api('/api/events', { method: 'POST', body });
+        LL.notice('#notice', 'Thank you. An editor will review and post the event.', 'success');
+        f.reset();
+      } catch (err) {
+        LL.notice('#notice', err.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>

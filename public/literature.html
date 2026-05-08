@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Literature — Local Lee</title>
+  <meta name="description" content="A curated reading list on neighborhood, place, and household life — plus reader-suggested books, with room for discussion.">
+  <link rel="canonical" href="https://locallee.org/literature">
+  <link rel="stylesheet" href="/css/style.css">
+  <meta property="og:title" content="Literature — Local Lee">
+  <meta property="og:description" content="A curated reading list on neighborhood, place, and household life — plus reader-suggested books, with room for discussion.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://locallee.org/literature">
+  <meta property="og:site_name" content="Local Lee">
+  <meta name="twitter:card" content="summary">
+  
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Local Lee home">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+          <circle cx="32" cy="32" r="30" fill="#c89c4d" stroke="#3e2810" stroke-width="2"/>
+          <ellipse cx="22" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(-25 22 24)"/>
+          <ellipse cx="42" cy="24" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2" transform="rotate(25 42 24)"/>
+          <ellipse cx="32" cy="20" rx="3" ry="7" fill="#f5ecd7" stroke="#3e2810" stroke-width="1.2"/>
+          <path d="M32 28 v22" stroke="#3e2810" stroke-width="2" stroke-linecap="round"/>
+          <path d="M8 52 q24 -8 48 0 v6 h-48 z" fill="#5a3a1b" stroke="#3e2810" stroke-width="1.5"/>
+        </svg>
+        <span><span class="brand-name">Local Lee</span><br><span class="brand-tag">Lee County, Illinois</span></span>
+      </a>
+      <nav class="primary" aria-label="Primary">
+        <a href="/about">About</a>
+        <a href="/directory">Directory</a>
+        <a href="/events">Events</a>
+        <a href="/literature">Literature</a>
+        <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/contact">Contact</a>
+      </nav>
+      <div class="nav-account" id="nav-account" aria-live="polite"></div>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <h1>The Local Lee reading list</h1>
+      <p>Books on neighborhood, place, and household economy. <a href="/submit/book">Suggest one →</a></p>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-which="curated">Curated</button>
+      <button class="tab" role="tab" aria-selected="false" data-which="suggested">Reader-suggested</button>
+      <button class="tab" role="tab" aria-selected="false" data-which="all">All</button>
+    </div>
+
+    <div id="books" class="card-grid" aria-busy="true"></div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div>
+        <h4>Local Lee</h4>
+        <p>A neighborly network for Lee County, Illinois — Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the country in between.</p>
+      </div>
+      <div>
+        <h4>Around the site</h4>
+        <ul>
+          <li><a href="/about">About</a></li>
+          <li><a href="/directory">Business directory</a></li>
+          <li><a href="/events">Events</a></li>
+          <li><a href="/literature">Literature</a></li>
+          <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Pitch in</h4>
+        <ul>
+          <li><a href="/submit/business">List a business</a></li>
+          <li><a href="/submit/event">Post an event</a></li>
+          <li><a href="/submit/book">Suggest a book</a></li>
+          <li><a href="/submit/aid-post">Post a need or offer</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine-print">© <span id="year"></span> Local Lee — Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
+  </footer>
+
+  <script src="/js/main.js"></script>
+  <script>document.getElementById('year').textContent = new Date().getFullYear();</script>
+  <script>
+    let allBooks = [];
+    function render(which) {
+      const list = document.getElementById('books');
+      list.setAttribute('aria-busy', 'true');
+      let books = allBooks;
+      if (which === 'curated') books = allBooks.filter(b => b.curated);
+      if (which === 'suggested') books = allBooks.filter(b => !b.curated);
+      if (!books.length) {
+        list.innerHTML = '<p class="dim">No books here yet.</p>';
+      } else {
+        list.innerHTML = books.map(b => `
+          <article class="card">
+            <h3><a href="/literature/${LL.escape(b.slug)}">${LL.escape(b.title)}</a></h3>
+            <div class="meta">${b.author ? LL.escape(b.author) : 'Unknown author'}${b.year ? ' · ' + LL.escape(b.year) : ''}${b.curated ? ' · <span class="tag">Curated</span>' : ' · <span class="tag">Reader pick</span>'}</div>
+            <p>${LL.escape((b.description || '').slice(0, 240))}${(b.description || '').length > 240 ? '…' : ''}</p>
+          </article>`).join('');
+      }
+      list.setAttribute('aria-busy', 'false');
+    }
+    document.querySelectorAll('.tab').forEach(t => {
+      t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', 'false'));
+        t.setAttribute('aria-selected', 'true');
+        render(t.dataset.which);
+      });
+    });
+    (async () => {
+      try {
+        const { books } = await LL.api('/api/books');
+        allBooks = books;
+        render('curated');
+      } catch (err) {
+        document.getElementById('books').innerHTML = '<p class="dim">Couldn\'t load books.</p>';
+      }
+    })();
+  </script>
+</body>
+</html>
