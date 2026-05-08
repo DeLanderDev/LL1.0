@@ -120,19 +120,30 @@ log "Installing dependencies…"
 sudo -u "${APP_USER}" -H bash -lc "cd '${APP_DIR}' && npm ci --omit=dev --no-audit --no-fund"
 
 # --------------------------------------------------------------- env file
+# Cookie Secure flag tracks whether we expect HTTPS. Until DOMAIN is
+# wired up (and thus certbot), the site is reached over plain HTTP and
+# Secure cookies would be silently dropped by the browser, breaking
+# login. We re-derive it on every deploy and persist it in the env file.
+if [[ -n "${DOMAIN}" ]]; then
+  COOKIE_SECURE_VALUE="true"
+else
+  COOKIE_SECURE_VALUE="false"
+fi
+
 if [[ ! -f "${ENV_FILE}" ]]; then
   log "Generating ${ENV_FILE} (first deploy)…"
   SESSION_SECRET="$(openssl rand -hex 32 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -d '\n=')"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 2>/dev/null | tr -d '/+=')}"
   umask 077
   cat > "${ENV_FILE}" <<EOF
-# Local Lee — production environment. Mode 600. Do not commit.
+# Local Lee — production environment. Mode 640. Do not commit.
 NODE_ENV=production
 PORT=${APP_PORT}
 SITE_URL=${SITE_URL}
 SESSION_SECRET=${SESSION_SECRET}
 ADMIN_EMAIL=${ADMIN_EMAIL}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
+COOKIE_SECURE=${COOKIE_SECURE_VALUE}
 EOF
   chown root:"${APP_USER}" "${ENV_FILE}"
   chmod 640 "${ENV_FILE}"
@@ -143,7 +154,12 @@ EOF
   echo "    (Saved in ${ENV_FILE}. Change on first sign-in.)"
   echo
 else
-  log "Reusing existing ${ENV_FILE}."
+  log "Reusing existing ${ENV_FILE} (refreshing COOKIE_SECURE=${COOKIE_SECURE_VALUE})."
+  if grep -q '^COOKIE_SECURE=' "${ENV_FILE}"; then
+    sed -i "s/^COOKIE_SECURE=.*/COOKIE_SECURE=${COOKIE_SECURE_VALUE}/" "${ENV_FILE}"
+  else
+    echo "COOKIE_SECURE=${COOKIE_SECURE_VALUE}" >> "${ENV_FILE}"
+  fi
 fi
 
 # --------------------------------------------------------------- systemd unit
