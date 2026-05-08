@@ -72,6 +72,43 @@
     el.hidden = !msg;
   };
 
+  // Update <link rel="canonical">, og:url, and (optionally) og:title to
+  // reflect the current page. Used by slug-detail pages whose static HTML
+  // ships with a parent-page canonical.
+  LL.setCanonical = function (path, title) {
+    const origin =
+      (document.querySelector('link[rel="canonical"]') &&
+        new URL(
+          document.querySelector('link[rel="canonical"]').href,
+          location.origin
+        ).origin) ||
+      location.origin;
+    const url = origin + (path || location.pathname);
+    let link = document.querySelector('link[rel="canonical"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'canonical';
+      document.head.appendChild(link);
+    }
+    link.href = url;
+    const og = document.querySelector('meta[property="og:url"]');
+    if (og) og.setAttribute('content', url);
+    if (title) {
+      const ogt = document.querySelector('meta[property="og:title"]');
+      if (ogt) ogt.setAttribute('content', title);
+    }
+  };
+
+  // Resolve a possibly-untrusted "next" parameter (typically from the URL)
+  // to a same-origin path. Anything that looks like a protocol or
+  // protocol-relative URL is rejected — defends against open redirects.
+  LL.safeNext = function (raw, fallback) {
+    const fb = fallback || '/';
+    if (typeof raw !== 'string' || !raw) return fb;
+    if (raw[0] !== '/' || raw.startsWith('//') || raw.startsWith('/\\')) return fb;
+    return raw;
+  };
+
   LL.markCurrent = function () {
     const path = location.pathname.replace(/\/$/, '') || '/';
     document.querySelectorAll('nav.primary a[href]').forEach((a) => {

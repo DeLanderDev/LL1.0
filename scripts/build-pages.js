@@ -283,6 +283,7 @@ pages['business.html'] = shell({
       try {
         const { business: b } = await LL.api('/api/businesses/' + encodeURIComponent(slug));
         document.title = b.name + ' — Local Lee';
+        LL.setCanonical(location.pathname, document.title);
         const ld = {
           '@context': 'https://schema.org', '@type': 'LocalBusiness',
           name: b.name, description: b.description || undefined,
@@ -400,6 +401,7 @@ pages['event.html'] = shell({
       document.head.appendChild(ldEl);
 
       document.title = e.title + ' — Local Lee';
+      LL.setCanonical(location.pathname, document.title);
       root.innerHTML = \`
         <div class="page-head">
           <p class="small dim"><a href="/events">← All events</a></p>
@@ -547,6 +549,7 @@ pages['book.html'] = shell({
         const { book: b, comments } = await LL.api('/api/books/' + encodeURIComponent(slug));
         book = b;
         document.title = b.title + ' — Local Lee';
+        LL.setCanonical(location.pathname, document.title);
         const ld = {
           '@context': 'https://schema.org', '@type': 'Book',
           name: b.title, author: b.author ? { '@type': 'Person', name: b.author } : undefined,
@@ -705,6 +708,7 @@ pages['aid-post.html'] = shell({
         const { post: p } = await LL.api('/api/aid/posts/' + encodeURIComponent(id));
         const days = LL.daysUntil(p.expires_at);
         document.title = p.title + ' — Local Lee';
+        LL.setCanonical(location.pathname, document.title);
         root.innerHTML = \`
           <div class="page-head">
             <p class="small dim"><a href="/mutual-aid">← Mutual aid</a></p>
@@ -758,8 +762,8 @@ pages['login.html'] = shell({
           method: 'POST',
           body: { email: f.email.value, password: f.password.value }
         });
-        const next = new URLSearchParams(location.search).get('next') || '/';
-        location.href = next;
+        const raw = new URLSearchParams(location.search).get('next');
+        location.href = LL.safeNext(raw, '/');
       } catch (err) {
         LL.notice('#notice', err.message, 'error');
       }

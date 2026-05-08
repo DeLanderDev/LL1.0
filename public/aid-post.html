@@ -86,6 +86,7 @@
         const { post: p } = await LL.api('/api/aid/posts/' + encodeURIComponent(id));
         const days = LL.daysUntil(p.expires_at);
         document.title = p.title + ' — Local Lee';
+        LL.setCanonical(location.pathname, document.title);
         root.innerHTML = `
           <div class="page-head">
             <p class="small dim"><a href="/mutual-aid">← Mutual aid</a></p>

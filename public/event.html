@@ -102,6 +102,7 @@
       document.head.appendChild(ldEl);
 
       document.title = e.title + ' — Local Lee';
+      LL.setCanonical(location.pathname, document.title);
       root.innerHTML = `
         <div class="page-head">
           <p class="small dim"><a href="/events">← All events</a></p>
