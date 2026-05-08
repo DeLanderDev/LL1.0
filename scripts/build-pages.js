@@ -24,6 +24,9 @@ const HEADER = `<a class="skip-link" href="#main">Skip to content</a>
         <a href="/events">Events</a>
         <a href="/literature">Literature</a>
         <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/newsletter">Newsletter</a>
+        <a href="/discussion">Discussion</a>
+        <a href="/donate">Donate</a>
         <a href="/contact">Contact</a>
       </nav>
       <div class="nav-account" id="nav-account" aria-live="polite"></div>
@@ -44,6 +47,9 @@ const FOOTER = `<footer class="site-footer">
           <li><a href="/events">Events</a></li>
           <li><a href="/literature">Literature</a></li>
           <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/newsletter">Newsletter</a></li>
+          <li><a href="/discussion">Discussion</a></li>
+          <li><a href="/donate">Donate</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
       </div>
@@ -54,11 +60,18 @@ const FOOTER = `<footer class="site-footer">
           <li><a href="/submit/event">Post an event</a></li>
           <li><a href="/submit/book">Suggest a book</a></li>
           <li><a href="/submit/aid-post">Post a need or offer</a></li>
+          <li><a href="/newsletter/suggest">Suggest a newsletter topic</a></li>
         </ul>
       </div>
     </div>
     <p class="fine-print">© <span id="year"></span> Local Lee - Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
   </footer>`;
+
+// AltCha widget snippet to drop inside any form. The widget renders a
+// short proof-of-work challenge and adds a hidden input named "altcha"
+// to the form on completion, which our submit handlers pick up
+// automatically via f.elements.
+const ALTCHA = `<altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>`;
 
 function shell(opts) {
   const {
@@ -70,7 +83,11 @@ function shell(opts) {
     extraScript = '',
     bodyClass = '',
     narrow = false,
+    altcha = false,
   } = opts;
+  const altchaScript = altcha
+    ? '<script src="/js/altcha.min.js" defer></script>'
+    : '';
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -86,6 +103,7 @@ function shell(opts) {
   <meta property="og:url" content="https://locallee.org${canonical}">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
+  ${altchaScript}
   ${extraHead}
 </head>
 <body${bodyClass ? ' class="' + bodyClass + '"' : ''}>
@@ -109,6 +127,7 @@ const pages = {};
 
 // ----- Contact -----
 pages['contact.html'] = shell({
+  altcha: true,
   title: 'Contact - Local Lee',
   description: 'Get in touch with Local Lee - corrections, suggestions, or a hand with the editing.',
   canonical: '/contact',
@@ -133,6 +152,7 @@ pages['contact.html'] = shell({
         <label for="c-message">Message</label>
         <textarea id="c-message" name="message" rows="6" required maxlength="4000"></textarea>
       </div>
+      ${ALTCHA}
       <button type="submit" class="btn">Send</button>
       <div id="c-notice" class="notice" hidden></div>
     </form>`,
@@ -147,6 +167,7 @@ pages['contact.html'] = shell({
             name: f.name.value,
             email: f.email.value,
             message: f.message.value,
+            altcha: f.elements.altcha ? f.elements.altcha.value : '',
           },
         });
         LL.notice('#c-notice', 'Thank you - we\\'ll be in touch.', 'success');
@@ -500,6 +521,7 @@ pages['literature.html'] = shell({
 
 // ----- Single book page -----
 pages['book.html'] = shell({
+  altcha: true,
   title: 'Book - Local Lee',
   description: 'A book on the Local Lee reading list.',
   canonical: '/literature',
@@ -512,7 +534,8 @@ pages['book.html'] = shell({
           <label for="c-body">Add to the conversation</label>
           <textarea id="c-body" name="body" rows="4" maxlength="4000" required></textarea>
         </div>
-        <button type="submit" class="btn">Post comment</button>
+        ${ALTCHA}
+      <button type="submit" class="btn">Post comment</button>
         <div id="c-notice" class="notice small" hidden></div>
       </form>
       <p id="comment-signin" class="dim" hidden><a href="/login">Sign in</a> or <a href="/register">join</a> to comment.</p>
@@ -576,7 +599,7 @@ pages['book.html'] = shell({
       const body = document.getElementById('c-body').value.trim();
       if (!body) return;
       try {
-        await LL.api('/api/books/' + book.id + '/comments', { method: 'POST', body: { body } });
+        await LL.api('/api/books/' + book.id + '/comments', { method: 'POST', body: { body, altcha: e.currentTarget.elements.altcha ? e.currentTarget.elements.altcha.value : '' } });
         document.getElementById('c-body').value = '';
         const data = await LL.api('/api/books/' + encodeURIComponent(slug));
         renderComments(data.comments);
@@ -762,6 +785,7 @@ pages['login.html'] = shell({
 
 // ----- Register -----
 pages['register.html'] = shell({
+  altcha: true,
   title: 'Join - Local Lee',
   description: 'Create a free Local Lee account to comment, claim a listing, or post to the mutual-aid board.',
   canonical: '/register',
@@ -781,7 +805,8 @@ pages['register.html'] = shell({
           <label for="password">Password <span class="dim small">(at least 8 characters)</span></label>
           <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
         </div>
-        <button type="submit" class="btn">Create account</button>
+        ${ALTCHA}
+      <button type="submit" class="btn">Create account</button>
         <div id="notice" class="notice" hidden></div>
       </form>
       <p class="small dim" style="margin-top:1em">Already have one? <a href="/login">Sign in.</a></p>
@@ -793,7 +818,12 @@ pages['register.html'] = shell({
       try {
         await LL.api('/api/register', {
           method: 'POST',
-          body: { email: f.email.value, password: f.password.value, display_name: f.display_name.value }
+          body: {
+            email: f.email.value,
+            password: f.password.value,
+            display_name: f.display_name.value,
+            altcha: f.elements.altcha ? f.elements.altcha.value : '',
+          }
         });
         location.href = '/';
       } catch (err) {
@@ -805,6 +835,7 @@ pages['register.html'] = shell({
 
 // ----- Submit business -----
 pages['submit-business.html'] = shell({
+  altcha: true,
   title: 'List a business - Local Lee',
   description: 'Submit a locally owned Lee County business to the Local Lee directory. An editor reviews each submission before it appears.',
   canonical: '/submit/business',
@@ -814,6 +845,10 @@ pages['submit-business.html'] = shell({
       <p>Submit a locally owned Lee County business. An editor will read it before it goes live.</p>
     </div>
 
+    <div class="notice">
+      <strong>What gets listed.</strong> Local Lee is a directory of <strong>locally owned, independent small businesses</strong> with a real presence in <strong>Lee County, Illinois</strong> (Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the surrounding rural areas). National chains, franchises, and out-of-county businesses will not be approved. If a business has multiple locations, only the Lee County one belongs here.
+    </div>
+
     <form id="form" class="card" novalidate>
       <div class="form-row">
         <label for="name">Business name *</label>
@@ -821,17 +856,18 @@ pages['submit-business.html'] = shell({
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label for="category_id">Category</label>
-          <select id="category_id" name="category_id"><option value="">- pick one -</option></select>
+          <label for="category_id">Category *</label>
+          <select id="category_id" name="category_id" required><option value="">- pick one -</option></select>
         </div>
         <div class="form-row">
-          <label for="town">Town</label>
-          <select id="town" name="town">
+          <label for="town">Town in Lee County *</label>
+          <select id="town" name="town" required>
             <option value="">- pick one -</option>
             <option>Dixon</option><option>Amboy</option><option>Ashton</option>
             <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
             <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
             <option>Harmon</option><option>Nelson</option><option>Steward</option>
+            <option>Other (rural Lee County)</option>
           </select>
         </div>
       </div>
@@ -849,6 +885,7 @@ pages['submit-business.html'] = shell({
         <label for="hours">Hours <span class="dim small">(plain text is fine)</span></label>
         <input id="hours" name="hours" type="text" maxlength="300" placeholder="Mon–Fri 8a–5p, Sat 9a–noon">
       </div>
+      ${ALTCHA}
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>`,
@@ -887,6 +924,7 @@ pages['submit-business.html'] = shell({
 
 // ----- Submit event -----
 pages['submit-event.html'] = shell({
+  altcha: true,
   title: 'Post an event - Local Lee',
   description: 'Submit a community event happening in Lee County, Illinois. An editor reviews each one before posting.',
   canonical: '/submit/event',
@@ -918,6 +956,7 @@ pages['submit-event.html'] = shell({
         <div class="form-row"><label for="organizer">Hosted by</label><input id="organizer" name="organizer" type="text" maxlength="120"></div>
         <div class="form-row"><label for="contact">Contact for questions</label><input id="contact" name="contact" type="text" maxlength="200"></div>
       </div>
+      ${ALTCHA}
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>`,
@@ -943,6 +982,7 @@ pages['submit-event.html'] = shell({
 
 // ----- Submit book -----
 pages['submit-book.html'] = shell({
+  altcha: true,
   title: 'Suggest a book - Local Lee',
   description: 'Suggest a book for the Local Lee reading list. Books that fit the spirit of the project may be added.',
   canonical: '/submit/book',
@@ -960,6 +1000,7 @@ pages['submit-book.html'] = shell({
       </div>
       <div class="form-row"><label for="description">What is the book?</label><textarea id="description" name="description" rows="4" maxlength="4000"></textarea></div>
       <div class="form-row"><label for="why_we_read">Why should we read it together?</label><textarea id="why_we_read" name="why_we_read" rows="4" maxlength="2000"></textarea></div>
+      ${ALTCHA}
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>`,
@@ -980,6 +1021,7 @@ pages['submit-book.html'] = shell({
 
 // ----- Submit aid resource -----
 pages['submit-aid-resource.html'] = shell({
+  altcha: true,
   title: 'Suggest a mutual-aid resource - Local Lee',
   description: 'Suggest a food pantry, warming center, family resource, or other ongoing program for the Lee County mutual-aid directory.',
   canonical: '/submit/aid-resource',
@@ -1019,6 +1061,7 @@ pages['submit-aid-resource.html'] = shell({
         <div class="form-row"><label for="hours">Hours</label><input id="hours" name="hours" type="text" maxlength="300"></div>
       </div>
       <div class="form-row"><label for="notes">Notes for the editor</label><textarea id="notes" name="notes" rows="3" maxlength="2000"></textarea></div>
+      ${ALTCHA}
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>`,
@@ -1039,6 +1082,7 @@ pages['submit-aid-resource.html'] = shell({
 
 // ----- Submit aid post (need or offer) -----
 pages['submit-aid-post.html'] = shell({
+  altcha: true,
   title: 'Post a need or offer - Local Lee',
   description: 'Post a need or offer to the Local Lee mutual-aid board. Posts are reviewed before they appear and refresh every 30 days.',
   canonical: '/submit/aid-post',
@@ -1083,6 +1127,7 @@ pages['submit-aid-post.html'] = shell({
         <div class="form-row"><label for="contact_name">Your name (or what to call you)</label><input id="contact_name" name="contact_name" type="text" maxlength="80"></div>
         <div class="form-row"><label for="contact">How to reach you *</label><input id="contact" name="contact" type="text" required maxlength="200" placeholder="phone, email, or what works"></div>
       </div>
+      ${ALTCHA}
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>`,
@@ -1128,6 +1173,9 @@ pages['admin.html'] = shell({
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" aria-selected="true" data-which="queue">Pending queue</button>
         <button class="tab" role="tab" aria-selected="false" data-which="manage">Manage</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="newsletter">Newsletter</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="discussion">Discussion</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="donation">Donations</button>
         <button class="tab" role="tab" aria-selected="false" data-which="logo">Logo</button>
       </div>
 
@@ -1148,6 +1196,48 @@ pages['admin.html'] = shell({
         <section><h2>Book comments</h2><div id="m-comments"></div></section>
         <section><h2>Mutual aid: resources</h2><div id="m-aid-resources"></div></section>
         <section><h2>Mutual aid: needs &amp; offers</h2><div id="m-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-newsletter" class="panel" hidden>
+        <h2>Author a newsletter post</h2>
+        <form id="nl-form" class="card" novalidate>
+          <input type="hidden" id="nl-id" value="">
+          <div class="form-row"><label for="nl-title">Title</label><input id="nl-title" type="text" maxlength="200" required></div>
+          <div class="form-row"><label for="nl-body">Body</label><textarea id="nl-body" rows="14" maxlength="50000" required></textarea><p class="hint">Plain text. Blank lines start a new paragraph.</p></div>
+          <button type="submit" class="btn">Save draft</button>
+          <button type="button" class="btn btn-field" id="nl-publish">Save &amp; publish</button>
+          <button type="button" class="btn btn-secondary" id="nl-clear">New post</button>
+          <div id="nl-msg" class="notice small" hidden></div>
+        </form>
+
+        <h3>Existing posts</h3>
+        <div id="nl-list"></div>
+
+        <h3>Topic suggestions from neighbors</h3>
+        <div id="nl-topics"></div>
+      </div>
+
+      <div id="panel-discussion" class="panel" hidden>
+        <h2>Threads</h2>
+        <p class="dim small">Lock a thread to stop new replies; delete to remove the whole thread (and its replies).</p>
+        <div id="d-threads"></div>
+      </div>
+
+      <div id="panel-donation" class="panel" hidden>
+        <h2>Donation page settings</h2>
+        <p class="dim small">Numbers entered as whole dollars are converted to cents.</p>
+        <form id="don-form" class="card" novalidate>
+          <div class="form-grid">
+            <div class="form-row"><label for="don-goal">Goal (whole dollars)</label><input id="don-goal" type="number" min="0" step="1"></div>
+            <div class="form-row"><label for="don-raised">Raised so far (whole dollars)</label><input id="don-raised" type="number" min="0" step="1"></div>
+            <div class="form-row"><label for="don-currency">Currency</label><input id="don-currency" type="text" maxlength="8" placeholder="USD"></div>
+            <div class="form-row"><label for="don-url-label">Button label</label><input id="don-url-label" type="text" maxlength="60" placeholder="Donate"></div>
+          </div>
+          <div class="form-row"><label for="don-url">External donate URL <span class="dim small">(GoFundMe, Donorbox, Stripe, etc.)</span></label><input id="don-url" type="url" maxlength="400"></div>
+          <div class="form-row"><label for="don-msg">Message shown above the progress bar</label><textarea id="don-msg" rows="6" maxlength="4000"></textarea></div>
+          <button type="submit" class="btn">Save</button>
+          <div id="don-status" class="notice small" hidden></div>
+        </form>
       </div>
 
       <div id="panel-logo" class="panel" hidden>
@@ -1334,7 +1424,136 @@ pages['admin.html'] = shell({
             delBtn('aidPost', p.id, p.title)
           )).join('')
         : '<p class="dim">No posts.</p>';
+
+      await loadNewsletter();
+      await loadDiscussion();
+      await loadDonation();
     }
+
+    // ---- newsletter ----
+    async function loadNewsletter() {
+      const data = await LL.api('/api/admin/newsletter');
+      const list = document.getElementById('nl-list');
+      list.innerHTML = data.posts.length
+        ? data.posts.map(p => row(
+            (p.status === 'published' ? '<span class="tag" style="background:#d9e1c2;border-color:#a8b88a">Published</span>' : '<span class="tag">Draft</span>') + ' · ' + LL.escape(LL.formatDate(p.created_at)),
+            '<h3 style="margin:0">' + LL.escape(p.title) + '</h3><p>' + LL.escape((p.body || '').slice(0, 200)) + ((p.body || '').length > 200 ? '...' : '') + '</p>',
+            '<button class="btn btn-secondary" onclick="nlEdit(' + p.id + ')">Edit</button>' +
+            (p.status === 'published'
+              ? '<a class="btn btn-secondary" target="_blank" href="/newsletter/' + LL.escape(p.slug) + '">View</a>' +
+                '<button class="btn btn-secondary" onclick="nlPublish(' + p.id + ',false)">Unpublish</button>'
+              : '<button class="btn btn-field" onclick="nlPublish(' + p.id + ',true)">Publish</button>') +
+            '<button class="btn btn-barn" onclick="nlDelete(' + p.id + ',\\'' + (p.title || '').replace(/[\\\\\\'"]/g,'') + '\\')">Delete</button>'
+          )).join('')
+        : '<p class="dim">No posts yet.</p>';
+      const tlist = document.getElementById('nl-topics');
+      tlist.innerHTML = data.topics.length
+        ? data.topics.map(t => row(
+            LL.escape(LL.formatDate(t.created_at)) + (t.contact_name ? ' · from ' + LL.escape(t.contact_name) : '') + (t.contact ? ' · ' + LL.escape(t.contact) : ''),
+            '<p>' + LL.escape(t.body) + '</p>',
+            '<button class="btn btn-barn" onclick="topicDelete(' + t.id + ')">Dismiss</button>'
+          )).join('')
+        : '<p class="dim">No topic suggestions waiting.</p>';
+    }
+    window.nlEdit = async function (id) {
+      const data = await LL.api('/api/admin/newsletter');
+      const p = data.posts.find(x => x.id === id);
+      if (!p) return;
+      document.getElementById('nl-id').value = p.id;
+      document.getElementById('nl-title').value = p.title;
+      document.getElementById('nl-body').value = p.body;
+      document.getElementById('panel-newsletter').scrollIntoView({ behavior: 'smooth' });
+    };
+    window.nlPublish = async function (id, publish) {
+      try {
+        await LL.api('/api/admin/newsletter/' + id, { method: 'POST', body: { publish } });
+        await loadNewsletter();
+      } catch (err) { alert(err.message); }
+    };
+    window.nlDelete = async function (id, label) {
+      if (!confirm('Delete "' + label + '"?')) return;
+      try { await LL.api('/api/admin/newsletter/' + id + '/delete', { method: 'POST' }); await loadNewsletter(); }
+      catch (err) { alert(err.message); }
+    };
+    window.topicDelete = async function (id) {
+      try { await LL.api('/api/admin/topic/' + id + '/delete', { method: 'POST' }); await loadNewsletter(); }
+      catch (err) { alert(err.message); }
+    };
+    document.getElementById('nl-clear').addEventListener('click', () => {
+      document.getElementById('nl-id').value = '';
+      document.getElementById('nl-title').value = '';
+      document.getElementById('nl-body').value = '';
+    });
+    async function nlSave(publish) {
+      const id = document.getElementById('nl-id').value;
+      const body = {
+        title: document.getElementById('nl-title').value,
+        body: document.getElementById('nl-body').value,
+      };
+      if (typeof publish === 'boolean') body.publish = publish;
+      try {
+        if (id) await LL.api('/api/admin/newsletter/' + id, { method: 'POST', body });
+        else await LL.api('/api/admin/newsletter', { method: 'POST', body });
+        LL.notice('#nl-msg', publish ? 'Published.' : 'Saved.', 'success');
+        document.getElementById('nl-id').value = '';
+        document.getElementById('nl-title').value = '';
+        document.getElementById('nl-body').value = '';
+        await loadNewsletter();
+      } catch (err) { LL.notice('#nl-msg', err.message, 'error'); }
+    }
+    document.getElementById('nl-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      nlSave(false);
+    });
+    document.getElementById('nl-publish').addEventListener('click', () => nlSave(true));
+
+    // ---- discussion mod ----
+    async function loadDiscussion() {
+      const { threads } = await LL.api('/api/threads');
+      document.getElementById('d-threads').innerHTML = threads.length
+        ? threads.map(t => row(
+            (t.locked ? '<span class="tag">Locked</span> ' : '') + 'started ' + LL.escape(LL.formatDate(t.created_at)) + ' &middot; ' + t.reply_count + ' replies',
+            '<h3 style="margin:0"><a target="_blank" href="/discussion/' + LL.escape(t.slug) + '">' + LL.escape(t.title) + '</a></h3><p class="small">by ' + LL.userLabel(t) + '</p>',
+            '<button class="btn btn-secondary" onclick="thLock(' + t.id + ',' + (t.locked ? 0 : 1) + ')">' + (t.locked ? 'Unlock' : 'Lock') + '</button>' +
+            '<button class="btn btn-barn" onclick="thDel(' + t.id + ',\\'' + (t.title || '').replace(/[\\\\\\'"]/g,'') + '\\')">Delete</button>'
+          )).join('')
+        : '<p class="dim">No threads yet.</p>';
+    }
+    window.thLock = async function (id, locked) {
+      try { await LL.api('/api/admin/thread/' + id + '/lock', { method: 'POST', body: { locked: !!locked } }); await loadDiscussion(); }
+      catch (err) { alert(err.message); }
+    };
+    window.thDel = async function (id, label) {
+      if (!confirm('Delete the thread "' + label + '"?')) return;
+      try { await LL.api('/api/admin/thread/' + id + '/delete', { method: 'POST' }); await loadDiscussion(); }
+      catch (err) { alert(err.message); }
+    };
+
+    // ---- donation ----
+    async function loadDonation() {
+      const { donation: d } = await LL.api('/api/donation');
+      document.getElementById('don-goal').value = Math.round((d.goal_cents || 0) / 100);
+      document.getElementById('don-raised').value = Math.round((d.raised_cents || 0) / 100);
+      document.getElementById('don-currency').value = d.currency || 'USD';
+      document.getElementById('don-url').value = d.url || '';
+      document.getElementById('don-url-label').value = d.url_label || 'Donate';
+      document.getElementById('don-msg').value = d.message || '';
+    }
+    document.getElementById('don-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        goal_cents: (parseInt(document.getElementById('don-goal').value, 10) || 0) * 100,
+        raised_cents: (parseInt(document.getElementById('don-raised').value, 10) || 0) * 100,
+        currency: document.getElementById('don-currency').value,
+        url: document.getElementById('don-url').value,
+        url_label: document.getElementById('don-url-label').value,
+        message: document.getElementById('don-msg').value,
+      };
+      try {
+        await LL.api('/api/admin/donation', { method: 'POST', body });
+        LL.notice('#don-status', 'Saved.', 'success');
+      } catch (err) { LL.notice('#don-status', err.message, 'error'); }
+    });
 
     // ---- logo upload ----
     document.getElementById('logo-form').addEventListener('submit', async (e) => {
@@ -1371,6 +1590,464 @@ pages['admin.html'] = shell({
     });
 
     load();
+  </script>`,
+});
+
+// ----- Newsletter list -----
+pages['newsletter.html'] = shell({
+  title: 'Newsletter - Local Lee',
+  description: 'The Local Lee newsletter: short, occasional reports from Lee County, Illinois on what is going on, who is doing it, and what we have been thinking about.',
+  canonical: '/newsletter',
+  main: `    <div class="page-head">
+      <h1>The Local Lee newsletter</h1>
+      <p>Short, occasional reports from around the county. Have a topic in mind? <a href="/newsletter/suggest">Suggest one.</a></p>
+    </div>
+    <ul class="row-list" id="posts" aria-busy="true"><li class="dim">Loading...</li></ul>`,
+  extraScript: `<script>
+    (async () => {
+      const list = document.getElementById('posts');
+      try {
+        const { posts } = await LL.api('/api/newsletter');
+        if (!posts.length) {
+          list.innerHTML = '<li class="dim">Nothing posted yet. Check back soon.</li>';
+        } else {
+          list.innerHTML = posts.map(p => \`
+            <li>
+              <h3 style="margin:0"><a href="/newsletter/\${LL.escape(p.slug)}">\${LL.escape(p.title)}</a></h3>
+              <div class="meta">\${LL.escape(LL.formatDay(p.published_at || p.created_at))}\${p.author_name ? ' &middot; by ' + LL.escape(p.author_name) : ''}</div>
+              <p>\${LL.escape(p.excerpt || '')}\${(p.excerpt || '').length >= 280 ? '...' : ''}</p>
+            </li>\`).join('');
+        }
+      } catch (err) { list.innerHTML = '<li class="dim">Could not load posts.</li>'; }
+      list.setAttribute('aria-busy', 'false');
+    })();
+  </script>`,
+});
+
+// ----- Single newsletter post -----
+pages['newsletter-post.html'] = shell({
+  altcha: true,
+  title: 'Newsletter post - Local Lee',
+  description: 'A post from the Local Lee newsletter.',
+  canonical: '/newsletter',
+  main: `    <article id="post" aria-busy="true"><p class="dim">Loading...</p></article>
+    <section id="comments-section" hidden>
+      <h2>Comments</h2>
+      <ul class="row-list" id="comments"></ul>
+      <form id="comment-form" class="card" hidden>
+        <div class="form-row">
+          <label for="c-body">Add to the conversation</label>
+          <textarea id="c-body" name="body" rows="4" maxlength="4000" required></textarea>
+        </div>
+        ${ALTCHA}
+        <button type="submit" class="btn">Post comment</button>
+        <div id="c-notice" class="notice small" hidden></div>
+      </form>
+      <p id="comment-signin" class="dim" hidden><a href="/login">Sign in</a> or <a href="/register">join</a> to comment.</p>
+    </section>`,
+  extraScript: `<script>
+    const slug = location.pathname.split('/').filter(Boolean).pop();
+    const root = document.getElementById('post');
+    let post = null;
+
+    function renderComments(comments) {
+      const ul = document.getElementById('comments');
+      if (!comments.length) {
+        ul.innerHTML = '<li class="dim">No comments yet.</li>';
+        return;
+      }
+      ul.innerHTML = comments.map(c => \`
+        <li class="comment-row">
+          \${LL.avatar(c, 40)}
+          <div>
+            <div class="meta"><strong>\${LL.userLabel(c)}</strong> &middot; \${LL.escape(LL.formatDate(c.created_at))}</div>
+            <p>\${LL.escape(c.body)}</p>
+          </div>
+        </li>\`).join('');
+    }
+
+    async function loadAll() {
+      try {
+        const data = await LL.api('/api/newsletter/' + encodeURIComponent(slug));
+        post = data.post;
+        document.title = post.title + ' - Local Lee';
+        const ld = {
+          '@context': 'https://schema.org', '@type': 'BlogPosting',
+          headline: post.title, datePublished: new Date((post.published_at || post.created_at) * 1000).toISOString(),
+          author: post.author_name ? { '@type': 'Person', name: post.author_name } : undefined
+        };
+        const ldEl = document.createElement('script');
+        ldEl.type = 'application/ld+json';
+        ldEl.textContent = JSON.stringify(ld);
+        document.head.appendChild(ldEl);
+        const paragraphs = post.body.split(/\\n{2,}/).map(p => '<p>' + LL.escape(p).replace(/\\n/g, '<br>') + '</p>').join('');
+        root.innerHTML = \`
+          <div class="page-head">
+            <p class="small dim"><a href="/newsletter">&larr; All posts</a></p>
+            <h1>\${LL.escape(post.title)}</h1>
+            <p class="meta">\${LL.escape(LL.formatDay(post.published_at || post.created_at))}\${post.author_name ? ' &middot; by ' + LL.escape(post.author_name) : ''}</p>
+          </div>
+          <div class="prose">\${paragraphs}</div>
+        \`;
+        renderComments(data.comments);
+        document.getElementById('comments-section').hidden = false;
+        const me = (await LL.api('/api/me')).user;
+        if (me) document.getElementById('comment-form').hidden = false;
+        else document.getElementById('comment-signin').hidden = false;
+        root.setAttribute('aria-busy', 'false');
+      } catch (err) {
+        root.innerHTML = '<p class="dim">Post not found. <a href="/newsletter">Back to the newsletter.</a></p>';
+      }
+    }
+
+    document.getElementById('comment-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      if (!body.body) return;
+      try {
+        await LL.api('/api/newsletter/' + post.id + '/comments', { method: 'POST', body });
+        document.getElementById('c-body').value = '';
+        const data = await LL.api('/api/newsletter/' + encodeURIComponent(slug));
+        renderComments(data.comments);
+        LL.notice('#c-notice', 'Posted.', 'success');
+      } catch (err) { LL.notice('#c-notice', err.message, 'error'); }
+    });
+
+    loadAll();
+  </script>`,
+});
+
+// ----- Newsletter topic suggestion -----
+pages['newsletter-suggest.html'] = shell({
+  altcha: true,
+  title: 'Suggest a newsletter topic - Local Lee',
+  description: 'Suggest a topic for an upcoming Local Lee newsletter post.',
+  canonical: '/newsletter/suggest',
+  narrow: true,
+  main: `    <div class="page-head">
+      <h1>Suggest a topic</h1>
+      <p>What would you like to see covered in an upcoming Local Lee post? Stories, businesses, events, questions about how something works in the county - all welcome.</p>
+    </div>
+    <form id="form" class="card" novalidate>
+      <div class="form-row">
+        <label for="body">Your suggestion *</label>
+        <textarea id="body" name="body" rows="5" required maxlength="2000"></textarea>
+      </div>
+      <div class="form-grid">
+        <div class="form-row"><label for="contact_name">Your name (optional)</label><input id="contact_name" name="contact_name" type="text" maxlength="80"></div>
+        <div class="form-row"><label for="contact">Email (optional, if you'd like a reply)</label><input id="contact" name="contact" type="text" maxlength="200"></div>
+      </div>
+      ${ALTCHA}
+      <button type="submit" class="btn">Send</button>
+      <div id="notice" class="notice" hidden></div>
+    </form>`,
+  extraScript: `<script>
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      try {
+        await LL.api('/api/newsletter/topics', { method: 'POST', body });
+        LL.notice('#notice', 'Thank you - your suggestion is in.', 'success');
+        f.reset();
+      } catch (err) { LL.notice('#notice', err.message, 'error'); }
+    });
+  </script>`,
+});
+
+// ----- Discussion list -----
+pages['discussion.html'] = shell({
+  title: 'Community discussion - Local Lee',
+  description: 'A space for Lee County neighbors to talk about what is going on in the county.',
+  canonical: '/discussion',
+  main: `    <div class="page-head">
+      <h1>Community discussion</h1>
+      <p>Threads from neighbors. Sign in to start one or jump in. <a class="btn btn-secondary" href="/discussion/new" style="margin-left:.5em">Start a thread</a></p>
+    </div>
+    <ul class="row-list" id="threads" aria-busy="true"><li class="dim">Loading...</li></ul>`,
+  extraScript: `<script>
+    (async () => {
+      const ul = document.getElementById('threads');
+      try {
+        const { threads } = await LL.api('/api/threads');
+        if (!threads.length) {
+          ul.innerHTML = '<li class="dim">No threads yet. <a href="/discussion/new">Start the first one.</a></li>';
+        } else {
+          ul.innerHTML = threads.map(t => \`
+            <li class="thread-row">
+              \${LL.avatar(t, 40)}
+              <div style="flex:1">
+                <h3 style="margin:0"><a href="/discussion/\${LL.escape(t.slug)}">\${LL.escape(t.title)}</a>\${t.locked ? ' <span class="tag">Locked</span>' : ''}</h3>
+                <div class="meta">started by \${LL.userLabel(t)} &middot; \${LL.escape(LL.formatDate(t.created_at))} &middot; <strong>\${t.reply_count}</strong> repl\${t.reply_count === 1 ? 'y' : 'ies'} &middot; latest \${LL.escape(LL.formatDate(t.last_activity_at))}</div>
+              </div>
+            </li>\`).join('');
+        }
+      } catch (err) { ul.innerHTML = '<li class="dim">Could not load threads.</li>'; }
+      ul.setAttribute('aria-busy', 'false');
+    })();
+  </script>`,
+});
+
+// ----- New thread -----
+pages['discussion-new.html'] = shell({
+  altcha: true,
+  title: 'Start a thread - Local Lee',
+  description: 'Start a new community discussion thread on Local Lee.',
+  canonical: '/discussion/new',
+  narrow: true,
+  main: `    <div class="page-head">
+      <h1>Start a thread</h1>
+      <p>You need to be signed in to start one. Keep it about Lee County and the people who live here.</p>
+    </div>
+    <div id="signin-gate" class="notice" hidden>
+      <a href="/login?next=/discussion/new">Sign in</a> or <a href="/register">join</a> to post.
+    </div>
+    <form id="form" class="card" novalidate hidden>
+      <div class="form-row"><label for="title">Title *</label><input id="title" name="title" type="text" required maxlength="200"></div>
+      <div class="form-row"><label for="body">Your post *</label><textarea id="body" name="body" rows="8" required maxlength="8000"></textarea></div>
+      ${ALTCHA}
+      <button type="submit" class="btn">Post thread</button>
+      <div id="notice" class="notice" hidden></div>
+    </form>`,
+  extraScript: `<script>
+    (async () => {
+      const me = (await LL.api('/api/me')).user;
+      if (!me) { document.getElementById('signin-gate').hidden = false; return; }
+      document.getElementById('form').hidden = false;
+    })();
+    document.getElementById('form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      try {
+        const r = await LL.api('/api/threads', { method: 'POST', body });
+        location.href = '/discussion/' + r.slug;
+      } catch (err) { LL.notice('#notice', err.message, 'error'); }
+    });
+  </script>`,
+});
+
+// ----- Single thread -----
+pages['thread.html'] = shell({
+  altcha: true,
+  title: 'Discussion - Local Lee',
+  description: 'A community discussion thread on Local Lee.',
+  canonical: '/discussion',
+  main: `    <article id="thread" aria-busy="true"><p class="dim">Loading...</p></article>
+    <section id="replies-section" hidden>
+      <h2>Replies</h2>
+      <ul class="row-list" id="replies"></ul>
+      <form id="reply-form" class="card" hidden>
+        <div class="form-row"><label for="r-body">Reply</label><textarea id="r-body" name="body" rows="4" maxlength="8000" required></textarea></div>
+        ${ALTCHA}
+        <button type="submit" class="btn">Post reply</button>
+        <div id="r-notice" class="notice small" hidden></div>
+      </form>
+      <p id="reply-signin" class="dim" hidden><a href="/login">Sign in</a> to reply.</p>
+      <p id="reply-locked" class="dim" hidden>This thread is locked.</p>
+    </section>`,
+  extraScript: `<script>
+    const slug = location.pathname.split('/').filter(Boolean).pop();
+    const root = document.getElementById('thread');
+    let thread = null;
+
+    function renderReplies(replies) {
+      const ul = document.getElementById('replies');
+      if (!replies.length) { ul.innerHTML = '<li class="dim">No replies yet.</li>'; return; }
+      ul.innerHTML = replies.map(r => \`
+        <li class="comment-row">
+          \${LL.avatar(r, 40)}
+          <div>
+            <div class="meta"><strong>\${LL.userLabel(r)}</strong> &middot; \${LL.escape(LL.formatDate(r.created_at))}</div>
+            <p>\${LL.escape(r.body)}</p>
+          </div>
+        </li>\`).join('');
+    }
+
+    async function load() {
+      try {
+        const data = await LL.api('/api/threads/' + encodeURIComponent(slug));
+        thread = data.thread;
+        document.title = thread.title + ' - Local Lee';
+        root.innerHTML = \`
+          <div class="page-head">
+            <p class="small dim"><a href="/discussion">&larr; All threads</a></p>
+            <h1>\${LL.escape(thread.title)}\${thread.locked ? ' <span class="tag">Locked</span>' : ''}</h1>
+          </div>
+          <div class="comment-row" style="margin-bottom:1em">
+            \${LL.avatar(thread, 48)}
+            <div>
+              <div class="meta">\${LL.userLabel(thread)} &middot; \${LL.escape(LL.formatDate(thread.created_at))}</div>
+              <p>\${LL.escape(thread.body)}</p>
+            </div>
+          </div>
+        \`;
+        renderReplies(data.replies);
+        document.getElementById('replies-section').hidden = false;
+        const me = (await LL.api('/api/me')).user;
+        if (thread.locked) {
+          document.getElementById('reply-locked').hidden = false;
+        } else if (me) {
+          document.getElementById('reply-form').hidden = false;
+        } else {
+          document.getElementById('reply-signin').hidden = false;
+        }
+        root.setAttribute('aria-busy', 'false');
+      } catch (err) {
+        root.innerHTML = '<p class="dim">Thread not found. <a href="/discussion">Back to discussion.</a></p>';
+      }
+    }
+
+    document.getElementById('reply-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      try {
+        await LL.api('/api/threads/' + thread.id + '/replies', { method: 'POST', body });
+        document.getElementById('r-body').value = '';
+        const data = await LL.api('/api/threads/' + encodeURIComponent(slug));
+        renderReplies(data.replies);
+        LL.notice('#r-notice', 'Posted.', 'success');
+      } catch (err) { LL.notice('#r-notice', err.message, 'error'); }
+    });
+
+    load();
+  </script>`,
+});
+
+// ----- Donate -----
+pages['donate.html'] = shell({
+  title: 'Support Local Lee',
+  description: 'Local Lee runs on a tiny budget - hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is moderating. Chip in if you can.',
+  canonical: '/donate',
+  narrow: true,
+  main: `    <div class="page-head">
+      <h1>Support Local Lee</h1>
+    </div>
+    <div id="donation" aria-busy="true"><p class="dim">Loading...</p></div>`,
+  extraScript: `<script>
+    function dollars(cents, currency) {
+      const n = (cents || 0) / 100;
+      try {
+        return n.toLocaleString(undefined, { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 });
+      } catch (_) { return '$' + n.toFixed(0); }
+    }
+    (async () => {
+      const root = document.getElementById('donation');
+      try {
+        const { donation: d } = await LL.api('/api/donation');
+        const goal = Math.max(d.goal_cents || 0, 1);
+        const pct = Math.min(100, Math.round((d.raised_cents / goal) * 100));
+        const paragraphs = (d.message || '').split(/\\n{2,}/).map(p => '<p>' + LL.escape(p).replace(/\\n/g, '<br>') + '</p>').join('');
+        root.innerHTML = \`
+          \${paragraphs}
+          <div class="card" style="margin:1.5em 0">
+            <div class="goal-row"><strong>Raised:</strong> \${LL.escape(dollars(d.raised_cents, d.currency))}</div>
+            <div class="goal-row"><strong>Goal:</strong> \${LL.escape(dollars(d.goal_cents, d.currency))}</div>
+            <div class="progress" role="progressbar" aria-valuenow="\${pct}" aria-valuemin="0" aria-valuemax="100" style="margin:.7em 0">
+              <div class="progress-fill" style="width:\${pct}%"></div>
+            </div>
+            <div class="meta">\${pct}% of the way there.</div>
+            \${d.url ? '<p style="margin-top:1em"><a class="btn btn-barn" href="' + LL.escape(d.url) + '" rel="noopener" target="_blank">' + LL.escape(d.url_label || 'Donate') + '</a></p>' : '<p class="dim small">A donation link will be posted here once we have one set up.</p>'}
+          </div>
+          <p class="small dim">Funds go toward operating the site - hosting, the domain, occasional advertising in local outlets, and other costs related to running this service. We are not a charity; donations are not tax-deductible. The progress bar is updated by hand, not by an integration, so it may lag the actual total by a day or two.</p>
+        \`;
+      } catch (err) {
+        root.innerHTML = '<p class="dim">Could not load donation info.</p>';
+      }
+      root.setAttribute('aria-busy', 'false');
+    })();
+  </script>`,
+});
+
+// ----- Profile -----
+pages['profile.html'] = shell({
+  title: 'Your profile - Local Lee',
+  description: 'Your Local Lee profile.',
+  canonical: '/profile',
+  narrow: true,
+  extraHead: '<meta name="robots" content="noindex">',
+  main: `    <div class="page-head">
+      <h1>Your profile</h1>
+      <p>Set the name and image neighbors see when you post on Local Lee.</p>
+    </div>
+    <div id="signin-gate" hidden><div class="notice error">Sign in to view your profile. <a href="/login?next=/profile">Sign in</a></div></div>
+    <div id="profile-body" hidden>
+      <div class="card" style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:flex-start">
+        <img id="my-avatar" class="avatar" src="" alt="Your avatar" width="96" height="96" style="border:1px solid var(--rule);background:var(--cream);border-radius:50%">
+        <form id="avatar-form" style="flex:1 1 220px">
+          <div class="form-row">
+            <label for="avatar-file">Profile image</label>
+            <input id="avatar-file" type="file" accept="image/png,image/jpeg,image/webp">
+            <p class="hint">PNG, JPEG, or WebP. Up to 256 KB. Square images look best.</p>
+          </div>
+          <button type="submit" class="btn">Upload</button>
+          <button type="button" class="btn btn-secondary" id="avatar-reset">Use auto-generated monogram</button>
+          <div id="avatar-msg" class="notice small" hidden></div>
+        </form>
+      </div>
+      <form id="profile-form" class="card" style="margin-top:1.5em" novalidate>
+        <div class="form-row"><label for="display_name">Display name</label><input id="display_name" name="display_name" type="text" maxlength="80"></div>
+        <div class="form-row"><label for="bio">Short bio</label><textarea id="bio" name="bio" rows="3" maxlength="400"></textarea><p class="hint">A line or two about yourself, optional.</p></div>
+        <button type="submit" class="btn">Save</button>
+        <div id="profile-msg" class="notice small" hidden></div>
+      </form>
+    </div>`,
+  extraScript: `<script>
+    let me = null;
+    (async () => {
+      const r = await LL.api('/api/me');
+      if (!r.user) { document.getElementById('signin-gate').hidden = false; return; }
+      const p = (await LL.api('/api/me/profile')).user;
+      me = p;
+      document.getElementById('display_name').value = p.display_name || '';
+      document.getElementById('bio').value = p.bio || '';
+      document.getElementById('my-avatar').src = '/avatar/' + p.id + '?v=' + Date.now();
+      document.getElementById('profile-body').hidden = false;
+    })();
+
+    document.getElementById('profile-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = { display_name: f.display_name.value, bio: f.bio.value };
+      try {
+        await LL.api('/api/me/profile', { method: 'POST', body });
+        LL.notice('#profile-msg', 'Saved.', 'success');
+      } catch (err) { LL.notice('#profile-msg', err.message, 'error'); }
+    });
+
+    document.getElementById('avatar-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = document.getElementById('avatar-file').files[0];
+      if (!file) { LL.notice('#avatar-msg', 'Pick a file first.', 'error'); return; }
+      if (file.size > 256 * 1024) { LL.notice('#avatar-msg', 'File is over 256 KB.', 'error'); return; }
+      const dataUrl = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result);
+        r.onerror = () => rej(r.error);
+        r.readAsDataURL(file);
+      });
+      try {
+        await LL.api('/api/me/avatar', { method: 'POST', body: { data: dataUrl } });
+        document.getElementById('my-avatar').src = '/avatar/' + me.id + '?v=' + Date.now();
+        LL.notice('#avatar-msg', 'Updated.', 'success');
+        document.getElementById('avatar-file').value = '';
+      } catch (err) { LL.notice('#avatar-msg', err.message, 'error'); }
+    });
+
+    document.getElementById('avatar-reset').addEventListener('click', async () => {
+      if (!confirm('Reset your profile image to the auto-generated monogram?')) return;
+      try {
+        await LL.api('/api/me/avatar/reset', { method: 'POST' });
+        document.getElementById('my-avatar').src = '/avatar/' + me.id + '?v=' + Date.now();
+        LL.notice('#avatar-msg', 'Reset.', 'success');
+      } catch (err) { LL.notice('#avatar-msg', err.message, 'error'); }
+    });
   </script>`,
 });
 

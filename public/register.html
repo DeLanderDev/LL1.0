@@ -13,6 +13,7 @@
   <meta property="og:url" content="https://locallee.org/register">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
+  <script src="/js/altcha.min.js" defer></script>
   
 </head>
 <body>
@@ -29,6 +30,9 @@
         <a href="/events">Events</a>
         <a href="/literature">Literature</a>
         <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/newsletter">Newsletter</a>
+        <a href="/discussion">Discussion</a>
+        <a href="/donate">Donate</a>
         <a href="/contact">Contact</a>
       </nav>
       <div class="nav-account" id="nav-account" aria-live="polite"></div>
@@ -52,7 +56,8 @@
           <label for="password">Password <span class="dim small">(at least 8 characters)</span></label>
           <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
         </div>
-        <button type="submit" class="btn">Create account</button>
+        <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+      <button type="submit" class="btn">Create account</button>
         <div id="notice" class="notice" hidden></div>
       </form>
       <p class="small dim" style="margin-top:1em">Already have one? <a href="/login">Sign in.</a></p>
@@ -73,6 +78,9 @@
           <li><a href="/events">Events</a></li>
           <li><a href="/literature">Literature</a></li>
           <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/newsletter">Newsletter</a></li>
+          <li><a href="/discussion">Discussion</a></li>
+          <li><a href="/donate">Donate</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
       </div>
@@ -83,6 +91,7 @@
           <li><a href="/submit/event">Post an event</a></li>
           <li><a href="/submit/book">Suggest a book</a></li>
           <li><a href="/submit/aid-post">Post a need or offer</a></li>
+          <li><a href="/newsletter/suggest">Suggest a newsletter topic</a></li>
         </ul>
       </div>
     </div>
@@ -98,7 +107,12 @@
       try {
         await LL.api('/api/register', {
           method: 'POST',
-          body: { email: f.email.value, password: f.password.value, display_name: f.display_name.value }
+          body: {
+            email: f.email.value,
+            password: f.password.value,
+            display_name: f.display_name.value,
+            altcha: f.elements.altcha ? f.elements.altcha.value : '',
+          }
         });
         location.href = '/';
       } catch (err) {

@@ -13,6 +13,7 @@
   <meta property="og:url" content="https://locallee.org/submit/business">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
+  <script src="/js/altcha.min.js" defer></script>
   
 </head>
 <body>
@@ -29,6 +30,9 @@
         <a href="/events">Events</a>
         <a href="/literature">Literature</a>
         <a href="/mutual-aid">Mutual Aid</a>
+        <a href="/newsletter">Newsletter</a>
+        <a href="/discussion">Discussion</a>
+        <a href="/donate">Donate</a>
         <a href="/contact">Contact</a>
       </nav>
       <div class="nav-account" id="nav-account" aria-live="polite"></div>
@@ -41,6 +45,10 @@
       <p>Submit a locally owned Lee County business. An editor will read it before it goes live.</p>
     </div>
 
+    <div class="notice">
+      <strong>What gets listed.</strong> Local Lee is a directory of <strong>locally owned, independent small businesses</strong> with a real presence in <strong>Lee County, Illinois</strong> (Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the surrounding rural areas). National chains, franchises, and out-of-county businesses will not be approved. If a business has multiple locations, only the Lee County one belongs here.
+    </div>
+
     <form id="form" class="card" novalidate>
       <div class="form-row">
         <label for="name">Business name *</label>
@@ -48,17 +56,18 @@
       </div>
       <div class="form-grid">
         <div class="form-row">
-          <label for="category_id">Category</label>
-          <select id="category_id" name="category_id"><option value="">- pick one -</option></select>
+          <label for="category_id">Category *</label>
+          <select id="category_id" name="category_id" required><option value="">- pick one -</option></select>
         </div>
         <div class="form-row">
-          <label for="town">Town</label>
-          <select id="town" name="town">
+          <label for="town">Town in Lee County *</label>
+          <select id="town" name="town" required>
             <option value="">- pick one -</option>
             <option>Dixon</option><option>Amboy</option><option>Ashton</option>
             <option>Compton</option><option>Franklin Grove</option><option>Lee Center</option>
             <option>Paw Paw</option><option>Sublette</option><option>West Brooklyn</option>
             <option>Harmon</option><option>Nelson</option><option>Steward</option>
+            <option>Other (rural Lee County)</option>
           </select>
         </div>
       </div>
@@ -76,6 +85,7 @@
         <label for="hours">Hours <span class="dim small">(plain text is fine)</span></label>
         <input id="hours" name="hours" type="text" maxlength="300" placeholder="Mon–Fri 8a–5p, Sat 9a–noon">
       </div>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>
@@ -95,6 +105,9 @@
           <li><a href="/events">Events</a></li>
           <li><a href="/literature">Literature</a></li>
           <li><a href="/mutual-aid">Mutual aid</a></li>
+          <li><a href="/newsletter">Newsletter</a></li>
+          <li><a href="/discussion">Discussion</a></li>
+          <li><a href="/donate">Donate</a></li>
           <li><a href="/contact">Contact</a></li>
         </ul>
       </div>
@@ -105,6 +118,7 @@
           <li><a href="/submit/event">Post an event</a></li>
           <li><a href="/submit/book">Suggest a book</a></li>
           <li><a href="/submit/aid-post">Post a need or offer</a></li>
+          <li><a href="/newsletter/suggest">Suggest a newsletter topic</a></li>
         </ul>
       </div>
     </div>
