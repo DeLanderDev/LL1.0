@@ -92,14 +92,17 @@ fi
 
 # --------------------------------------------------------------- code
 log "Updating code in ${APP_DIR} (branch: ${DEPLOY_BRANCH})…"
-git -C "${APP_DIR}" fetch --all --prune --quiet
+# safe.directory='*' keeps git from complaining when /opt/locallee is owned
+# by ${APP_USER} but the script (and therefore git) runs as root.
+GIT="git -c safe.directory=* -C ${APP_DIR}"
+${GIT} fetch --all --prune --quiet
 # Make sure the requested branch exists on origin before we destroy local state.
-if ! git -C "${APP_DIR}" rev-parse --verify --quiet "origin/${DEPLOY_BRANCH}" >/dev/null; then
+if ! ${GIT} rev-parse --verify --quiet "origin/${DEPLOY_BRANCH}" >/dev/null; then
   die "Branch '${DEPLOY_BRANCH}' not found on origin. Set DEPLOY_BRANCH=<branch> or merge your PR first."
 fi
 # Make sure we end up on the requested branch even if HEAD is detached.
-git -C "${APP_DIR}" checkout -q "${DEPLOY_BRANCH}"
-git -C "${APP_DIR}" reset --hard "origin/${DEPLOY_BRANCH}" --quiet
+${GIT} checkout -q "${DEPLOY_BRANCH}"
+${GIT} reset --hard "origin/${DEPLOY_BRANCH}" --quiet
 
 # Sanity: the branch we just checked out actually contains the app.
 if [[ ! -f "${APP_DIR}/server.js" || ! -f "${APP_DIR}/package.json" ]]; then
@@ -107,7 +110,10 @@ if [[ ! -f "${APP_DIR}/server.js" || ! -f "${APP_DIR}/package.json" ]]; then
 fi
 
 mkdir -p "${APP_DIR}/data"
-chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}/data"
+# The app user needs to own the working tree so npm can write node_modules
+# and the .npm cache. We re-chown on every deploy in case git pulled in
+# new files as root.
+chown -R "${APP_USER}:${APP_USER}" "${APP_DIR}"
 
 log "Installing dependencies…"
 # Use a clean install so repeated deploys don't drift.
