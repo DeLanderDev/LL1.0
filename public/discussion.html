@@ -100,7 +100,7 @@
               </div>
             </li>`).join('');
         }
-      } catch (err) { ul.innerHTML = '<li class="dim">Could not load threads.</li>'; }
+      } catch (err) { ul.innerHTML = '<li class="dim">Could not load threads: ' + LL.escape(err.message || err) + '</li>'; }
       ul.setAttribute('aria-busy', 'false');
     })();
   </script>

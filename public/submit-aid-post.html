@@ -80,7 +80,8 @@
         <div class="form-row"><label for="contact_name">Your name (or what to call you)</label><input id="contact_name" name="contact_name" type="text" maxlength="80"></div>
         <div class="form-row"><label for="contact">How to reach you *</label><input id="contact" name="contact" type="text" required maxlength="200" placeholder="phone, email, or what works"></div>
       </div>
-      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+      <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>

@@ -95,7 +95,7 @@
             <li>
               <h3 style="margin:0"><a href="/newsletter/${LL.escape(p.slug)}">${LL.escape(p.title)}</a></h3>
               <div class="meta">${LL.escape(LL.formatDay(p.published_at || p.created_at))}${p.author_name ? ' &middot; by ' + LL.escape(p.author_name) : ''}</div>
-              <p>${LL.escape(p.excerpt || '')}${(p.excerpt || '').length >= 280 ? '...' : ''}</p>
+              <p>${LL.escape((p.excerpt || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240))}${(p.excerpt || '').length >= 280 ? '...' : ''}</p>
             </li>`).join('');
         }
       } catch (err) { list.innerHTML = '<li class="dim">Could not load posts.</li>'; }

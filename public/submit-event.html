@@ -67,7 +67,8 @@
         <div class="form-row"><label for="organizer">Hosted by</label><input id="organizer" name="organizer" type="text" maxlength="120"></div>
         <div class="form-row"><label for="contact">Contact for questions</label><input id="contact" name="contact" type="text" maxlength="200"></div>
       </div>
-      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+      <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
       <button type="submit" class="btn">Submit for review</button>
       <div id="notice" class="notice" hidden></div>
     </form>

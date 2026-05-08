@@ -49,7 +49,8 @@
           <label for="c-body">Add to the conversation</label>
           <textarea id="c-body" name="body" rows="4" maxlength="4000" required></textarea>
         </div>
-        <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+        <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
       <button type="submit" class="btn">Post comment</button>
         <div id="c-notice" class="notice small" hidden></div>
       </form>

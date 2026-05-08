@@ -56,7 +56,8 @@
           <label for="password">Password <span class="dim small">(at least 8 characters)</span></label>
           <input id="password" name="password" type="password" required minlength="8" autocomplete="new-password">
         </div>
-        <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+        <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
       <button type="submit" class="btn">Create account</button>
         <div id="notice" class="notice" hidden></div>
       </form>

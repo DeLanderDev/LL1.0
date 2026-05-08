@@ -49,7 +49,8 @@
           <label for="c-body">Add to the conversation</label>
           <textarea id="c-body" name="body" rows="4" maxlength="4000" required></textarea>
         </div>
-        <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" hidefooter strings='{"verified":"Verified","verifying":"Verifying...","label":"I am human"}'></altcha-widget>
+        <noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
+      <altcha-widget class="altcha" challengeurl="/api/altcha/challenge" auto="onload" hidefooter strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>
         <button type="submit" class="btn">Post comment</button>
         <div id="c-notice" class="notice small" hidden></div>
       </form>
@@ -128,14 +129,20 @@
         ldEl.type = 'application/ld+json';
         ldEl.textContent = JSON.stringify(ld);
         document.head.appendChild(ldEl);
-        const paragraphs = post.body.split(/\n{2,}/).map(p => '<p>' + LL.escape(p).replace(/\n/g, '<br>') + '</p>').join('');
+        // post.body is server-sanitized HTML; render it directly. Old
+        // plain-text posts (from before the rich-text editor) still
+        // render fine - line breaks are preserved by the wrapper below.
+        const looksLikeHtml = /<[a-z][\s\S]*>/i.test(post.body || '');
+        const bodyHtml = looksLikeHtml
+          ? post.body
+          : '<p>' + LL.escape(post.body || '').replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>') + '</p>';
         root.innerHTML = `
           <div class="page-head">
             <p class="small dim"><a href="/newsletter">&larr; All posts</a></p>
             <h1>${LL.escape(post.title)}</h1>
             <p class="meta">${LL.escape(LL.formatDay(post.published_at || post.created_at))}${post.author_name ? ' &middot; by ' + LL.escape(post.author_name) : ''}</p>
           </div>
-          <div class="prose">${paragraphs}</div>
+          <article class="prose newsletter-body">${bodyHtml}</article>
         `;
         renderComments(data.comments);
         document.getElementById('comments-section').hidden = false;
