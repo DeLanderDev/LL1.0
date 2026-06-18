@@ -304,6 +304,32 @@ main.narrow { max-width: 760px; }
   margin-right: 6px;
 }
 
+.pillar-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+/* Featured org / month - intentionally a single, wider card to break
+   the four-column rhythm. */
+.featured-org { margin: 1.2rem 0 2rem; }
+.feature-card {
+  background:
+    linear-gradient(180deg, rgba(200, 156, 77, 0.10), transparent 60%),
+    var(--cream);
+  border-left: 4px solid var(--field);
+  padding: 1.5rem 1.6rem;
+}
+.feature-card h2 {
+  margin: 0.2em 0 0.4em;
+  font-size: 1.6rem;
+}
+.kicker {
+  font-family: var(--hand);
+  color: var(--barn);
+  text-transform: none;
+  font-size: 1rem;
+  margin: 0;
+}
+
 /* Tag chips */
 .tag {
   display: inline-block;

@@ -131,13 +131,7 @@
     }
   };
 
-  // Replace AltCha widgets with a friendly note when the page isn't
-  // running in a secure context (plain HTTP, file://, etc). The widget
-  // depends on Web Crypto, which is HTTPS-only - without this swap the
-  // visitor would see a red "Verification failed - secure context
-  // required" error from the widget. The server's requireAltcha is
-  // configured to soft-fail in the same condition, so the form still
-  // submits.
+  // Swap AltCha for a note on plain HTTP (Web Crypto is HTTPS-only).
   LL.handleInsecureAltcha = function () {
     if (typeof window === 'undefined') return;
     if (window.isSecureContext) return;

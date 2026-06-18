@@ -129,9 +129,6 @@
         ldEl.type = 'application/ld+json';
         ldEl.textContent = JSON.stringify(ld);
         document.head.appendChild(ldEl);
-        // post.body is server-sanitized HTML; render it directly. Old
-        // plain-text posts (from before the rich-text editor) still
-        // render fine - line breaks are preserved by the wrapper below.
         const looksLikeHtml = /<[a-z][\s\S]*>/i.test(post.body || '');
         const bodyHtml = looksLikeHtml
           ? post.body

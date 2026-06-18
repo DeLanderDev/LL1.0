@@ -67,11 +67,6 @@ const FOOTER = `<footer class="site-footer">
     <p class="fine-print">© <span id="year"></span> Local Lee - Lee County, Illinois. <a href="mailto:contact@locallee.org">contact@locallee.org</a></p>
   </footer>`;
 
-// AltCha widget (v3). The attribute is "challenge" (URL string), not
-// "challengeurl" (that was v2), and footer/logo hiding is done via the
-// "configuration" attribute as JSON. auto="onload" kicks off the
-// proof-of-work as soon as the page renders so the hidden "altcha"
-// input is already populated by the time the visitor submits.
 const ALTCHA = `<noscript><div class="notice">JavaScript is required to submit this form.</div></noscript>
       <altcha-widget class="altcha" challenge="/api/altcha/challenge" auto="onload" configuration='{"hideFooter":true}' strings='{"verified":"Verified","verifying":"Checking...","label":"Verifying you are a neighbor and not a bot..."}'></altcha-widget>`;
 
@@ -127,7 +122,6 @@ ${main}
 
 const pages = {};
 
-// ----- Contact -----
 pages['contact.html'] = shell({
   altcha: true,
   title: 'Contact - Local Lee',
@@ -181,7 +175,6 @@ pages['contact.html'] = shell({
   </script>`,
 });
 
-// ----- Business Directory (list) -----
 pages['directory.html'] = shell({
   title: 'Business Directory - Local Lee',
   description: 'A directory of locally owned businesses across Lee County, Illinois - farms, shops, trades, eateries, and more. Browse by category or town, or submit your own.',
@@ -284,7 +277,6 @@ pages['directory.html'] = shell({
   </script>`,
 });
 
-// ----- Single business page -----
 pages['business.html'] = shell({
   title: 'Business - Local Lee',
   description: 'A locally owned business in Lee County, Illinois.',
@@ -350,7 +342,6 @@ pages['business.html'] = shell({
   </script>`,
 });
 
-// ----- Events list -----
 pages['events.html'] = shell({
   title: 'Events - Local Lee',
   description: 'Upcoming community events in Lee County, Illinois - church suppers, farmers markets, school plays, work parties, and more. Anyone can submit.',
@@ -386,7 +377,6 @@ pages['events.html'] = shell({
   </script>`,
 });
 
-// ----- Single event -----
 pages['event.html'] = shell({
   title: 'Event - Local Lee',
   description: 'A community event in Lee County, Illinois.',
@@ -465,7 +455,6 @@ pages['event.html'] = shell({
   </script>`,
 });
 
-// ----- Literature list -----
 pages['literature.html'] = shell({
   title: 'Literature - Local Lee',
   description: 'A curated reading list on neighborhood, place, and household life - plus reader-suggested books, with room for discussion.',
@@ -521,7 +510,6 @@ pages['literature.html'] = shell({
   </script>`,
 });
 
-// ----- Single book page -----
 pages['book.html'] = shell({
   altcha: true,
   title: 'Book - Local Lee',
@@ -615,7 +603,6 @@ pages['book.html'] = shell({
   </script>`,
 });
 
-// ----- Mutual aid -----
 pages['mutual-aid.html'] = shell({
   title: 'Mutual Aid - Local Lee',
   description: 'Mutual aid in Lee County, Illinois - a directory of food pantries, warming centers, and family resources, plus a community board of needs and offers, all reviewed before posting.',
@@ -709,7 +696,6 @@ pages['mutual-aid.html'] = shell({
   </script>`,
 });
 
-// ----- Single aid post -----
 pages['aid-post.html'] = shell({
   title: 'Mutual Aid Post - Local Lee',
   description: 'A community mutual-aid post in Lee County, Illinois.',
@@ -746,7 +732,6 @@ pages['aid-post.html'] = shell({
   </script>`,
 });
 
-// ----- Login -----
 pages['login.html'] = shell({
   title: 'Sign in - Local Lee',
   description: 'Sign in to Local Lee to comment, claim a business, or post to the mutual-aid board.',
@@ -785,7 +770,6 @@ pages['login.html'] = shell({
   </script>`,
 });
 
-// ----- Register -----
 pages['register.html'] = shell({
   altcha: true,
   title: 'Join - Local Lee',
@@ -835,7 +819,6 @@ pages['register.html'] = shell({
   </script>`,
 });
 
-// ----- Submit business -----
 pages['submit-business.html'] = shell({
   altcha: true,
   title: 'List a business - Local Lee',
@@ -924,7 +907,6 @@ pages['submit-business.html'] = shell({
   </script>`,
 });
 
-// ----- Submit event -----
 pages['submit-event.html'] = shell({
   altcha: true,
   title: 'Post an event - Local Lee',
@@ -982,7 +964,6 @@ pages['submit-event.html'] = shell({
   </script>`,
 });
 
-// ----- Submit book -----
 pages['submit-book.html'] = shell({
   altcha: true,
   title: 'Suggest a book - Local Lee',
@@ -1021,7 +1002,6 @@ pages['submit-book.html'] = shell({
   </script>`,
 });
 
-// ----- Submit aid resource -----
 pages['submit-aid-resource.html'] = shell({
   altcha: true,
   title: 'Suggest a mutual-aid resource - Local Lee',
@@ -1082,7 +1062,6 @@ pages['submit-aid-resource.html'] = shell({
   </script>`,
 });
 
-// ----- Submit aid post (need or offer) -----
 pages['submit-aid-post.html'] = shell({
   altcha: true,
   title: 'Post a need or offer - Local Lee',
@@ -1158,7 +1137,6 @@ pages['submit-aid-post.html'] = shell({
   </script>`,
 });
 
-// ----- Admin -----
 pages['admin.html'] = shell({
   title: 'Admin - Local Lee',
   description: 'Local Lee admin dashboard.',
@@ -1461,8 +1439,6 @@ pages['admin.html'] = shell({
           )).join('')
         : '<p class="dim">No topic suggestions waiting.</p>';
     }
-    // Quill editor for newsletter body. Initialised lazily because the
-    // Quill script is loaded with defer.
     let nlQuill = null;
     function initQuillIfReady() {
       if (nlQuill || typeof Quill === 'undefined') return;
@@ -1623,7 +1599,6 @@ pages['admin.html'] = shell({
   </script>`,
 });
 
-// ----- Newsletter list -----
 pages['newsletter.html'] = shell({
   title: 'Newsletter - Local Lee',
   description: 'The Local Lee newsletter: short, occasional reports from Lee County, Illinois on what is going on, who is doing it, and what we have been thinking about.',
@@ -1654,7 +1629,6 @@ pages['newsletter.html'] = shell({
   </script>`,
 });
 
-// ----- Single newsletter post -----
 pages['newsletter-post.html'] = shell({
   altcha: true,
   title: 'Newsletter post - Local Lee',
@@ -1710,9 +1684,6 @@ pages['newsletter-post.html'] = shell({
         ldEl.type = 'application/ld+json';
         ldEl.textContent = JSON.stringify(ld);
         document.head.appendChild(ldEl);
-        // post.body is server-sanitized HTML; render it directly. Old
-        // plain-text posts (from before the rich-text editor) still
-        // render fine - line breaks are preserved by the wrapper below.
         const looksLikeHtml = /<[a-z][\\s\\S]*>/i.test(post.body || '');
         const bodyHtml = looksLikeHtml
           ? post.body
@@ -1755,7 +1726,6 @@ pages['newsletter-post.html'] = shell({
   </script>`,
 });
 
-// ----- Newsletter topic suggestion -----
 pages['newsletter-suggest.html'] = shell({
   altcha: true,
   title: 'Suggest a newsletter topic - Local Lee',
@@ -1794,7 +1764,6 @@ pages['newsletter-suggest.html'] = shell({
   </script>`,
 });
 
-// ----- Discussion list -----
 pages['discussion.html'] = shell({
   title: 'Community discussion - Local Lee',
   description: 'A space for Lee County neighbors to talk about what is going on in the county.',
@@ -1827,7 +1796,6 @@ pages['discussion.html'] = shell({
   </script>`,
 });
 
-// ----- New thread -----
 pages['discussion-new.html'] = shell({
   altcha: true,
   title: 'Start a thread - Local Lee',
@@ -1871,7 +1839,6 @@ pages['discussion-new.html'] = shell({
   </script>`,
 });
 
-// ----- Single thread -----
 pages['thread.html'] = shell({
   altcha: true,
   title: 'Discussion - Local Lee',
@@ -1960,7 +1927,6 @@ pages['thread.html'] = shell({
   </script>`,
 });
 
-// ----- Donate -----
 pages['donate.html'] = shell({
   title: 'Support Local Lee',
   description: 'Local Lee runs on a tiny budget - hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is moderating. Chip in if you can.',
@@ -2005,7 +1971,6 @@ pages['donate.html'] = shell({
   </script>`,
 });
 
-// ----- Profile -----
 pages['profile.html'] = shell({
   title: 'Your profile - Local Lee',
   description: 'Your Local Lee profile.',
@@ -2091,14 +2056,13 @@ pages['profile.html'] = shell({
   </script>`,
 });
 
-// ----- 404 -----
 pages['404.html'] = shell({
   title: 'Not found - Local Lee',
   description: 'Page not found.',
   canonical: '/',
   narrow: true,
-  main: `    <div class="page-head"><h1>That page is off the map.</h1><p>We couldn't find what you were looking for.</p></div>
-    <p><a class="btn" href="/">Back to the front porch</a></p>`,
+  main: `    <div class="page-head"><h1>Not found</h1><p>That page doesn't exist (or doesn't anymore).</p></div>
+    <p><a class="btn" href="/">Home</a> &middot; <a href="/directory">Directory</a> &middot; <a href="/events">Events</a> &middot; <a href="/mutual-aid">Mutual aid</a></p>`,
 });
 
 for (const [filename, content] of Object.entries(pages)) {

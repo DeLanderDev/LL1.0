@@ -375,8 +375,6 @@
           )).join('')
         : '<p class="dim">No topic suggestions waiting.</p>';
     }
-    // Quill editor for newsletter body. Initialised lazily because the
-    // Quill script is loaded with defer.
     let nlQuill = null;
     function initQuillIfReady() {
       if (nlQuill || typeof Quill === 'undefined') return;

@@ -11,9 +11,6 @@ const Database = require('better-sqlite3');
 const altcha = require('altcha-lib');
 const sanitizeHtml = require('sanitize-html');
 
-// Allow-list for newsletter HTML. Wider than a comment field but well
-// short of "anything goes" — no inline event handlers, no <script>,
-// only http(s)/mailto/tel links, only image data: URIs are blocked.
 const NEWSLETTER_HTML = {
   allowedTags: [
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -46,7 +43,6 @@ const NEWSLETTER_HTML = {
   },
 };
 
-// ----- Configuration -----
 const PORT = process.env.PORT || 8082;
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_PATH = path.join(DATA_DIR, 'locallee.db');
@@ -63,7 +59,6 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-// ----- Schema -----
 db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,8 +239,6 @@ CREATE INDEX IF NOT EXISTS idx_newsletters_status ON newsletters(status);
 CREATE INDEX IF NOT EXISTS idx_threads_activity ON threads(last_activity_at DESC);
 `);
 
-// Lazily add columns introduced after the original schema. Safe across
-// re-runs because each ALTER TABLE is wrapped in a try/catch.
 function addColumnIfMissing(table, col, def) {
   const cols = db.prepare(`PRAGMA table_info(${table})`).all();
   if (!cols.some((c) => c.name === col)) {
@@ -255,7 +248,6 @@ function addColumnIfMissing(table, col, def) {
 addColumnIfMissing('users', 'avatar_ext', 'TEXT');
 addColumnIfMissing('users', 'bio', 'TEXT');
 
-// ----- Seed admin + categories + a little curated content -----
 function seed() {
   const adminRow = db
     .prepare('SELECT id FROM users WHERE email = ?')
@@ -348,36 +340,28 @@ function seed() {
         'A patient case for why a healthy economy begins on the farm and at the kitchen table.',
       ],
       [
+        'The Death and Life of Great American Cities',
+        'death-and-life-of-great-american-cities',
+        'Jane Jacobs',
+        '1961',
+        'Jacobs argues that cities live or die on the everyday details of their streets, blocks, and sidewalks. Small business, mixed use, short blocks, and eyes on the street: the unromantic mechanics of a place worth living in.',
+        'Reads like it was written about a small county too. Most of what works in Dixon or Amboy works for the same reasons it works in Greenwich Village.',
+      ],
+      [
         'Small Is Beautiful',
         'small-is-beautiful',
         'E. F. Schumacher',
         '1973',
-        'A study of economics as if people mattered - appropriate scale, appropriate technology, durable work.',
-        'Practical questions about what size of enterprise actually serves a place.',
-      ],
-      [
-        'The Long-Legged House',
-        'long-legged-house',
-        'Wendell Berry',
-        '1969',
-        'Essays on staying put, on a particular Kentucky river, on the work of becoming native to a place.',
-        'A primer on what it means to belong to a county.',
+        'Subtitled "economics as if people mattered." Schumacher makes the case for appropriate scale, appropriate technology, and durable work.',
+        'A good antidote to the assumption that bigger is automatically better.',
       ],
       [
         'Bowling Alone',
         'bowling-alone',
         'Robert D. Putnam',
         '2000',
-        'A landmark account of the decline of civic and social life in American communities.',
-        'Names what we have lost in clear terms - and where to start rebuilding.',
-      ],
-      [
-        'The Death and Life of Great American Main Streets',
-        'main-streets',
-        'Various',
-        '-',
-        'A working anthology on small-town main streets, locally owned shops, and the economics of staying.',
-        'Reading list for anyone thinking about Dixon, Amboy, or Ashton five years from now.',
+        'Putnam tracks the long decline of civic and social life in American communities, from union halls to bridge clubs to Sunday dinners.',
+        'Names what got lost, in the kind of detail you can argue with.',
       ],
     ];
     for (const b of seedBooks) insertBook.run(...b);
@@ -388,37 +372,45 @@ function seed() {
     .get().n;
   if (aidCount === 0) {
     const insertAid = db.prepare(
-      `INSERT INTO aid_resources (name, slug, category, description, town, status)
-       VALUES (?, ?, ?, ?, ?, 'approved')`
+      `INSERT INTO aid_resources (name, slug, category, description, town, address, notes, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'approved')`
     );
     const seeds = [
-      ['Lee County Food Pantry Network', 'lee-county-food-pantries', 'Food', 'A directory entry for the food pantries serving Lee County. Contact your local pantry directly for hours and intake.', 'Dixon'],
-      ['Warming Center (Winter)', 'warming-center', 'Shelter', 'Seasonal warming center information for cold-weather emergencies.', 'Dixon'],
-      ['Diaper & Formula Bank', 'diaper-formula-bank', 'Family', 'Diapers, wipes, and formula for families in need.', 'Dixon'],
-      ['Tool Library (Informal)', 'tool-library', 'Goods', 'Neighbors lending neighbors - borrow what you need to fix what is yours.', 'Amboy'],
-      ['Ride Share Board', 'ride-share', 'Transportation', 'Posting board for rides to medical appointments, grocery runs, and church.', 'Lee County'],
+      ['Dixon PADS', 'dixon-pads',
+       'Shelter',
+       'Public Action to Deliver Shelter. Emergency shelter and related services for people without housing in the Dixon area. Hours and intake vary by season.',
+       'Dixon', null,
+       'Call ahead. Volunteers and donations welcome.'],
+      ['The Leydig Center', 'leydig-center',
+       'Goods',
+       'A volunteer-run thrift center in Dixon. Proceeds fund grants back into the community.',
+       'Dixon', null, null],
+      ['Habitat for Humanity of Lee County', 'habitat-lee-county',
+       'Shelter',
+       'Affordable housing partner serving Lee County. Take volunteer shifts on the build site, donate to the ReStore, or apply as a partner family.',
+       'Dixon', '924 W First St, Dixon', null],
+      ['Lee County Historical & Genealogical Society', 'lee-county-historical-society',
+       'Other',
+       'County records, genealogy research, and family history help. A good first stop when somebody asks "who lived in this house before us?"',
+       'Dixon', '113 S Hennepin Ave, Dixon', null],
+      ['United Way of Lee County', 'united-way-lee-county',
+       'Other',
+       'Local United Way affiliate. Community fundraising, partner agency referrals, and access to the 211 information line.',
+       'Dixon', null, 'Dial 211 for non-emergency help finding services.'],
     ];
     for (const r of seeds) insertAid.run(...r);
   }
 }
 seed();
 
-// ----- App -----
 const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-// 2 MB so admin logo uploads (sent as base64 data URLs) fit. Regular
-// form posts are far smaller; the larger ceiling only matters when the
-// request actually carries a big JSON payload.
+// 2 MB body to leave room for base64 logo uploads.
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
-// Secure cookies require HTTPS, so they have to be driven independently
-// from NODE_ENV - a production-mode app sitting behind plain HTTP (e.g.
-// reachable directly on a droplet port before nginx + certbot are in
-// place) can't set Secure cookies, or the browser silently drops them
-// and nobody can stay logged in. Default off; flip on once HTTPS is up.
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
 
 app.use(
@@ -443,7 +435,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// ----- Helpers -----
 function slugify(input) {
   return String(input || '')
     .toLowerCase()
@@ -492,7 +483,6 @@ function expireAidPosts() {
 setInterval(expireAidPosts, 1000 * 60 * 60).unref();
 expireAidPosts();
 
-// ----- AltCha (proof-of-work bot challenge) -----
 const ALTCHA_HMAC =
   process.env.ALTCHA_HMAC || crypto.randomBytes(32).toString('hex');
 
@@ -504,19 +494,10 @@ async function makeAltchaChallenge() {
   });
 }
 
-// AltCha relies on the browser's Web Crypto API (crypto.subtle), which
-// is only available in secure contexts (HTTPS or localhost). Until the
-// site is fronted by TLS, the widget can't actually run in visitors'
-// browsers, so we shouldn't reject submissions for missing payloads.
-// We treat COOKIE_SECURE=true as the signal that HTTPS is in place
-// (set automatically by the deploy script when DOMAIN is configured).
+// AltCha needs Web Crypto, so it only works over HTTPS. Until then we
+// soft-fail.
 const ALTCHA_ENFORCE = process.env.COOKIE_SECURE === 'true';
 
-// Routes that mutate via public POSTs run through this. Signed-in admins
-// skip the check (less friction for moderation actions); everyone else
-// must include a solved AltCha payload in `req.body.altcha` when
-// enforcement is on. When enforcement is off (HTTP demo mode), we still
-// verify a payload if it's present, just don't require one.
 async function requireAltcha(req, res, next) {
   if (req.session && req.session.role === 'admin') return next();
   const payload = req.body && req.body.altcha;
@@ -541,7 +522,6 @@ async function requireAltcha(req, res, next) {
   next();
 }
 
-// ----- Settings (key/value store for donation page, etc.) -----
 function getSetting(key, fallback) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   if (!row) return fallback;
@@ -569,7 +549,6 @@ const DEFAULT_DONATION = {
     'Local Lee runs on a small budget. Hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is doing the moderating - any of it that visitors care to chip in toward keeps the lights on.',
 };
 
-// ----- Auth API -----
 app.post('/api/register', requireAltcha, (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
@@ -622,7 +601,6 @@ app.get('/api/me', (req, res) => {
   res.json({ user: u || null });
 });
 
-// ----- Categories -----
 app.get('/api/categories', (req, res) => {
   const rows = db
     .prepare('SELECT id, name, slug, parent_id, sort_order FROM categories ORDER BY sort_order, name')
@@ -630,7 +608,6 @@ app.get('/api/categories', (req, res) => {
   res.json({ categories: rows });
 });
 
-// ----- Business Directory -----
 app.get('/api/businesses', (req, res) => {
   const cat = req.query.category;
   const town = req.query.town;
@@ -711,7 +688,6 @@ app.post('/api/businesses/:id/claim', requireAuth, requireAltcha, (req, res) => 
   res.json({ ok: true });
 });
 
-// ----- Events -----
 app.get('/api/events', (req, res) => {
   const now = Math.floor(Date.now() / 1000);
   const rows = db
@@ -798,7 +774,6 @@ app.post('/api/events/:id/rsvp', (req, res) => {
   res.json({ ok: true, count });
 });
 
-// ----- Literature -----
 app.get('/api/books', (req, res) => {
   const curated = req.query.curated;
   let sql = "SELECT * FROM books WHERE status = 'approved'";
@@ -857,7 +832,6 @@ app.post('/api/books/:id/comments', requireAuth, requireAltcha, (req, res) => {
   res.json({ ok: true });
 });
 
-// ----- Mutual Aid: curated resources -----
 app.get('/api/aid/resources', (req, res) => {
   const cat = req.query.category;
   let sql = "SELECT * FROM aid_resources WHERE status = 'approved'";
@@ -898,7 +872,6 @@ app.post('/api/aid/resources', requireAltcha, (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-// ----- Mutual Aid: needs & offers -----
 app.get('/api/aid/posts', (req, res) => {
   expireAidPosts();
   const kind = req.query.kind;
@@ -954,18 +927,15 @@ app.post('/api/aid/posts', requireAltcha, (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-// ----- Contact -----
 app.post('/api/contact', requireAltcha, (req, res) => {
   const name = trim(req.body.name, 120);
   const email = trim(req.body.email, 254);
   const message = trim(req.body.message, 4000);
   if (!name || !message) return res.status(400).json({ error: 'Name and message required.' });
-  // Persist as an aid post in admin queue? No - log.
   console.log(`[contact] ${new Date().toISOString()} from=${name}<${email}>: ${message}`);
   res.json({ ok: true });
 });
 
-// ----- Admin -----
 app.get('/api/admin/queue', requireAdmin, (req, res) => {
   const businesses = db
     .prepare(
@@ -989,9 +959,6 @@ app.get('/api/admin/queue', requireAdmin, (req, res) => {
   res.json({ businesses, events, books, aidResources, aidPosts });
 });
 
-// Types reachable via the generic /api/admin/:type/:id/{approve,reject,delete}
-// dispatcher. Approve/reject only make sense for the first five, but
-// delete works for everything that has a numeric primary key.
 const APPROVABLE = {
   business: 'businesses',
   event: 'events',
@@ -1041,8 +1008,6 @@ app.post('/api/admin/business/:id/claim/reject', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// Admin delete: hard-removes a row regardless of status. Cascades follow
-// the FK definitions (event RSVPs, book comments, thread replies, etc.).
 app.post('/api/admin/:type/:id/delete', requireAdmin, (req, res) => {
   const table = DELETABLE[req.params.type];
   if (!table) return res.status(400).json({ error: 'Unknown type: ' + req.params.type });
@@ -1052,7 +1017,6 @@ app.post('/api/admin/:type/:id/delete', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// Lists of approved content for the admin "Manage" view.
 app.get('/api/admin/all', requireAdmin, (req, res) => {
   const businesses = db
     .prepare(
@@ -1099,7 +1063,6 @@ app.get('/api/admin/all', requireAdmin, (req, res) => {
   res.json({ businesses, events, books, aidResources, aidPosts, bookComments });
 });
 
-// ----- Brand mark (logo) -----
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -1171,7 +1134,6 @@ app.post('/api/admin/logo', requireAdmin, (req, res) => {
   }
   if (buf.length > 1024 * 1024)
     return res.status(413).json({ error: 'Logo must be 1 MB or smaller.' });
-  // Wipe any earlier logo files so we don't accumulate orphans.
   for (const e of new Set(Object.values(ALLOWED_LOGO_MIMES))) {
     try { fs.unlinkSync(path.join(UPLOAD_DIR, 'logo.' + e)); } catch (_) {}
   }
@@ -1192,7 +1154,6 @@ app.post('/api/admin/logo/reset', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ----- AltCha challenge endpoint -----
 app.get('/api/altcha/challenge', async (req, res) => {
   try {
     const challenge = await makeAltchaChallenge();
@@ -1203,7 +1164,6 @@ app.get('/api/altcha/challenge', async (req, res) => {
   }
 });
 
-// ----- Newsletter -----
 app.get('/api/newsletter', (req, res) => {
   const rows = db
     .prepare(
@@ -1315,11 +1275,6 @@ app.post('/api/admin/newsletter/:id', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// (delete endpoints for newsletter, topic, newsletter-comment, thread,
-// and reply are handled by the generic /api/admin/:type/:id/delete
-// dispatcher above, with type names mapped via DELETABLE.)
-
-// ----- Discussion threads -----
 app.get('/api/threads', (req, res) => {
   const rows = db
     .prepare(
@@ -1389,9 +1344,6 @@ app.post('/api/admin/thread/:id/lock', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// (delete handled by the generic dispatcher; see DELETABLE map.)
-
-// ----- Donation settings -----
 app.get('/api/donation', (req, res) => {
   const data = getSetting('donation', DEFAULT_DONATION);
   res.json({ donation: { ...DEFAULT_DONATION, ...data } });
@@ -1414,7 +1366,6 @@ app.post('/api/admin/donation', requireAdmin, (req, res) => {
   res.json({ ok: true, donation: next });
 });
 
-// ----- Profile + avatar -----
 const AVATAR_DIR = path.join(DATA_DIR, 'avatars');
 if (!fs.existsSync(AVATAR_DIR)) fs.mkdirSync(AVATAR_DIR, { recursive: true });
 
@@ -1527,7 +1478,6 @@ app.post('/api/me/avatar/reset', requireAuth, (req, res) => {
   res.json({ ok: true });
 });
 
-// ----- Sitemap & robots & llms.txt (dynamic with current content) -----
 app.get('/sitemap.xml', (req, res) => {
   const urls = [
     '/', '/about', '/contact', '/directory', '/events', '/literature', '/mutual-aid',
@@ -1554,7 +1504,6 @@ app.get('/sitemap.xml', (req, res) => {
   res.set('Content-Type', 'application/xml').send(xml);
 });
 
-// ----- Pretty routes for slug pages (serve static page; client JS fetches data) -----
 const pages = {
   '/': 'index.html',
   '/about': 'about.html',
@@ -1601,7 +1550,6 @@ app.get('/mutual-aid/post/:id', (req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'aid-post.html'))
 );
 
-// ----- Static -----
 app.use(
   express.static(path.join(__dirname, 'public'), {
     extensions: ['html'],
