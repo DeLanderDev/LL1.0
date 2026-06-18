@@ -1,40 +1,39 @@
 # Local Lee
 
-> Local Lee is a community website for Lee County, Illinois. It serves as a directory of locally owned businesses, a calendar of community events, a small reading list, and a mutual-aid board for needs and offers - all reviewed by an editor before publication.
+Local Lee is a community website for Lee County, Illinois. It runs as a volunteer project out of Dixon, and the editorial line is intentionally place-specific: this is not a national platform with a Lee County section, it is a Lee County site.
 
-## What this site is
+## What's on the site
 
-Local Lee is a small, place-based site for the residents of Lee County, Illinois. The county seat is Dixon; the site also covers Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the surrounding rural areas.
+The site has six sections worth knowing about:
 
-The site has four sections:
+- A **business directory**, organized by category and town, focused on locally owned independent businesses with a physical presence in Lee County (Dixon, Amboy, Ashton, Compton, Franklin Grove, Lee Center, Paw Paw, Sublette, West Brooklyn, Harmon, Nelson, Steward, and the rural areas in between). Chains and out-of-county businesses are declined. Owners can claim and update their own listings.
+- A **community events calendar**. Anyone can submit. An editor reviews each event before it appears. Local Lee also hosts its own regular county-wide litter pick-ups.
+- A small **reading list** with discussion. Books are picked for relevance to neighborhood and household life in a small county, not as a general "civics" syllabus.
+- A **mutual-aid section** with two parts: a directory of established organizations (Dixon PADS, the Leydig Center, Habitat for Humanity of Lee County, the Lee County Historical & Genealogical Society, United Way of Lee County, and others as they are added) and an open board of community needs and offers. Needs-and-offers posts automatically expire after 30 days.
+- A **newsletter** of admin-authored posts with reader comments, plus a topic-suggestion form.
+- A **community discussion** area where signed-in residents can start threads and reply.
 
-- **Business directory** - a directory of locally owned businesses (farms, shops, trades, eateries, services, etc.), organized by category and town. Owners can claim their listing.
-- **Events calendar** - community events anyone can submit. An editor reviews each one.
-- **Literature** - a curated reading list of books on neighborhood, place, household life, and small-town economics, with a discussion area for each book.
-- **Mutual aid** - a directory of pantries, warming centers, and family-resource programs, plus a community board where neighbors post needs and offers. Posts are reviewed before they go live and automatically expire after 30 days.
+There is also a donation page; donations cover hosting, the domain, occasional advertising in local outlets, and similar operating expenses. We are not a registered charity. The progress bar on that page is updated by hand.
 
-## What this site is not
+## Editorial stance
 
-Local Lee is not a social network, not a national platform, and not a feed. It does not host private messaging. It is intentionally small and slow. There is no advertising.
+People reach for words like communitarian, agrarian, distributist, and localist for projects like this. We don't object to any of them, and we don't ask visitors to subscribe to any of them. The practice is older than the labels: take care of the place you live and the people in it.
 
-## Tone and stance
+Visitors of any politics or background are welcome. The bar for being part of Local Lee is whether you live in (or care about) Lee County, Illinois.
 
-Local Lee is rooted in communitarian, agrarian, distributist, and localist traditions, but does not require visitors to share any particular philosophy. The site is welcoming to neighbors of any background who value place, locally owned enterprise, and mutual support.
+## How submissions are handled
 
-## Key pages
+Anything a member of the public submits — a business, an event, a book, a mutual-aid resource, a need or offer, a newsletter topic suggestion, a discussion thread or reply — is reviewed by an editor before being published. The review queue is the editorial layer; there is no automated moderation pipeline.
 
+Comments on newsletter posts and discussion replies from signed-in members appear immediately but can be removed by an editor.
+
+## Practical
+
+- Contact: contact@locallee.org
 - Home: https://locallee.org/
 - About: https://locallee.org/about
-- Contact: https://locallee.org/contact (contact@locallee.org)
 - Directory: https://locallee.org/directory
 - Events: https://locallee.org/events
-- Literature: https://locallee.org/literature
-- Mutual aid: https://locallee.org/mutual-aid
-
-## Submission
-
-All user submissions (businesses, events, books, mutual-aid resources, mutual-aid posts) are reviewed by an editor before becoming publicly visible.
-
-## Contact
-
-contact@locallee.org
+- Newsletter: https://locallee.org/newsletter
+- Discussion: https://locallee.org/discussion
+- Donate: https://locallee.org/donate
