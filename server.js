@@ -1103,11 +1103,14 @@ const BUNDLED_LOGO_CANDIDATES = [
 ];
 
 app.get('/brand-mark', (req, res) => {
+  res.set('Cache-Control', 'no-cache, must-revalidate');
   const meta = logoMeta();
   if (meta) {
     const filePath = path.join(UPLOAD_DIR, meta.file);
     if (fs.existsSync(filePath)) {
-      res.set('Cache-Control', 'public, max-age=300');
+      const stat = fs.statSync(filePath);
+      res.set('ETag', '"' + stat.size + '-' + stat.mtimeMs + '"');
+      res.set('Last-Modified', stat.mtime.toUTCString());
       res.set('Content-Type', meta.mime);
       return fs.createReadStream(filePath).pipe(res);
     }
@@ -1115,12 +1118,13 @@ app.get('/brand-mark', (req, res) => {
   for (const [name, mime] of BUNDLED_LOGO_CANDIDATES) {
     const p = path.join(__dirname, 'public', 'img', name);
     if (fs.existsSync(p)) {
-      res.set('Cache-Control', 'public, max-age=86400');
+      const stat = fs.statSync(p);
+      res.set('ETag', '"' + stat.size + '-' + stat.mtimeMs + '"');
+      res.set('Last-Modified', stat.mtime.toUTCString());
       res.set('Content-Type', mime);
       return fs.createReadStream(p).pipe(res);
     }
   }
-  res.set('Cache-Control', 'public, max-age=86400');
   res.set('Content-Type', 'image/svg+xml; charset=utf-8');
   res.send(DEFAULT_BRAND_SVG);
 });
@@ -1421,23 +1425,24 @@ app.get('/avatar/:userId', (req, res) => {
   const user = db
     .prepare('SELECT id, email, display_name, avatar_ext FROM users WHERE id = ?')
     .get(id);
+  res.set('Cache-Control', 'no-cache, must-revalidate');
   if (!user) {
-    res.set('Cache-Control', 'public, max-age=60');
     res.set('Content-Type', 'image/svg+xml; charset=utf-8');
     return res.send(monogramFor({ display_name: 'L' }));
   }
   if (user.avatar_ext) {
     const file = path.join(AVATAR_DIR, `${user.id}.${user.avatar_ext}`);
     if (fs.existsSync(file)) {
+      const stat = fs.statSync(file);
       const mime =
         user.avatar_ext === 'png' ? 'image/png' :
         user.avatar_ext === 'jpg' ? 'image/jpeg' : 'image/webp';
-      res.set('Cache-Control', 'public, max-age=300');
+      res.set('ETag', '"' + stat.size + '-' + stat.mtimeMs + '"');
+      res.set('Last-Modified', stat.mtime.toUTCString());
       res.set('Content-Type', mime);
       return fs.createReadStream(file).pipe(res);
     }
   }
-  res.set('Cache-Control', 'public, max-age=600');
   res.set('Content-Type', 'image/svg+xml; charset=utf-8');
   res.send(monogramFor(user));
 });
@@ -1542,33 +1547,29 @@ const pages = {
   '/donate': 'donate.html',
   '/profile': 'profile.html',
 };
+function sendHtml(res, file) {
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.sendFile(path.join(__dirname, 'public', file));
+}
 for (const [route, file] of Object.entries(pages)) {
-  app.get(route, (req, res) => res.sendFile(path.join(__dirname, 'public', file)));
+  app.get(route, (req, res) => sendHtml(res, file));
 }
 
-app.get('/directory/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'business.html'))
-);
-app.get('/events/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'event.html'))
-);
-app.get('/literature/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'book.html'))
-);
-app.get('/newsletter/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'newsletter-post.html'))
-);
-app.get('/discussion/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'thread.html'))
-);
-app.get('/mutual-aid/post/:id', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'aid-post.html'))
-);
+app.get('/directory/:slug', (req, res) => sendHtml(res, 'business.html'));
+app.get('/events/:slug', (req, res) => sendHtml(res, 'event.html'));
+app.get('/literature/:slug', (req, res) => sendHtml(res, 'book.html'));
+app.get('/newsletter/:slug', (req, res) => sendHtml(res, 'newsletter-post.html'));
+app.get('/discussion/:slug', (req, res) => sendHtml(res, 'thread.html'));
+app.get('/mutual-aid/post/:id', (req, res) => sendHtml(res, 'aid-post.html'));
 
 app.use(
   express.static(path.join(__dirname, 'public'), {
     extensions: ['html'],
-    maxAge: '1h',
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    },
   })
 );
 
