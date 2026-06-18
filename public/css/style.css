@@ -163,14 +163,12 @@ label {
   );
 }
 .header-inner {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 1.1rem 1.5rem;
+  padding: 1rem 1.5rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.5rem;
   align-items: center;
-  justify-content: space-between;
 }
 .brand {
   display: flex;
@@ -178,11 +176,12 @@ label {
   gap: 0.7rem;
   text-decoration: none;
   color: var(--soil-deep);
+  flex-shrink: 0;
 }
 .brand-mark {
-  width: 80px;
-  height: 80px;
-  flex: 0 0 80px;
+  width: 96px;
+  height: 96px;
+  flex: 0 0 96px;
   object-fit: contain;
   border-radius: 4px;
 }
@@ -199,15 +198,18 @@ label {
   margin-top: -2px;
 }
 nav.primary {
+  flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
-  gap: 0.2rem 1rem;
+  gap: 0.2rem 0.4rem;
   align-items: center;
+  justify-content: flex-end;
+  font-size: 0.97rem;
 }
 nav.primary a {
   color: var(--ink-soft);
   text-decoration: none;
-  padding: 0.4em 0.6em;
+  padding: 0.4em 0.55em;
   border-radius: 2px;
   font-weight: 600;
 }
@@ -221,8 +223,27 @@ nav.primary a[aria-current="page"] {
   gap: 0.5rem;
   align-items: center;
   font-size: 0.95rem;
+  flex-shrink: 0;
 }
 .nav-account .who { color: var(--muted); }
+
+@media (max-width: 880px) {
+  .header-inner {
+    flex-wrap: wrap;
+    gap: 0.8rem 1rem;
+  }
+  .brand-mark {
+    width: 64px;
+    height: 64px;
+    flex: 0 0 64px;
+  }
+  nav.primary {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+    order: 3;
+  }
+  .nav-account { order: 2; }
+}
 
 /* Hero */
 .hero {
