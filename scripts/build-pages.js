@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const PUB = path.join(__dirname, '..', 'public');
 
-const BRAND_IMG = `<img class="brand-mark" src="/brand-mark" alt="" width="80" height="80">`;
+const BRAND_IMG = `<img class="brand-mark" src="/brand-mark" alt="" width="96" height="96">`;
 
 const HEADER = `<a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
