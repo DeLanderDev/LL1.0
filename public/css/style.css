@@ -180,9 +180,9 @@ label {
   color: var(--soil-deep);
 }
 .brand-mark {
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 80px;
+  height: 80px;
+  flex: 0 0 80px;
   object-fit: contain;
   border-radius: 4px;
 }
