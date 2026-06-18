@@ -94,10 +94,14 @@ function shell(opts) {
   <meta name="description" content="${description}">
   <link rel="canonical" href="https://locallee.org${canonical}">
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/brand-mark" type="image/png">
+  <link rel="apple-touch-icon" href="/brand-mark">
+  <link rel="shortcut icon" href="/brand-mark">
   <meta property="og:title" content="${title}">
   <meta property="og:description" content="${description}">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://locallee.org${canonical}">
+  <meta property="og:image" content="https://locallee.org/brand-mark">
   <meta property="og:site_name" content="Local Lee">
   <meta name="twitter:card" content="summary">
   ${altchaScript}

@@ -1095,6 +1095,13 @@ function logoMeta() {
   }
 }
 
+const BUNDLED_LOGO_CANDIDATES = [
+  ['logo.png', 'image/png'],
+  ['logo.jpg', 'image/jpeg'],
+  ['logo.webp', 'image/webp'],
+  ['logo.svg', 'image/svg+xml'],
+];
+
 app.get('/brand-mark', (req, res) => {
   const meta = logoMeta();
   if (meta) {
@@ -1103,6 +1110,14 @@ app.get('/brand-mark', (req, res) => {
       res.set('Cache-Control', 'public, max-age=300');
       res.set('Content-Type', meta.mime);
       return fs.createReadStream(filePath).pipe(res);
+    }
+  }
+  for (const [name, mime] of BUNDLED_LOGO_CANDIDATES) {
+    const p = path.join(__dirname, 'public', 'img', name);
+    if (fs.existsSync(p)) {
+      res.set('Cache-Control', 'public, max-age=86400');
+      res.set('Content-Type', mime);
+      return fs.createReadStream(p).pipe(res);
     }
   }
   res.set('Cache-Control', 'public, max-age=86400');
