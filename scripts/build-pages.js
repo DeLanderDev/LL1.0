@@ -13,6 +13,11 @@ const BRAND_IMG = `<img class="brand-mark" src="/brand-mark" alt="" width="96" h
 
 const HEADER = `<a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
+    <div class="top-bar">
+      <div class="top-bar-inner">
+        <div class="nav-account" id="nav-account" aria-live="polite"></div>
+      </div>
+    </div>
     <div class="header-inner">
       <a class="brand" href="/" aria-label="Local Lee home">
         ${BRAND_IMG}
@@ -29,7 +34,6 @@ const HEADER = `<a class="skip-link" href="#main">Skip to content</a>
         <a href="/donate">Donate</a>
         <a href="/contact">Contact</a>
       </nav>
-      <div class="nav-account" id="nav-account" aria-live="polite"></div>
     </div>
   </header>`;
 
