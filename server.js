@@ -229,6 +229,19 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS business_imports (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  uploaded_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+  uploaded_by INTEGER REFERENCES users(id),
+  row_data TEXT NOT NULL,
+  duplicate_of INTEGER REFERENCES businesses(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  resolution TEXT,
+  batch_id TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_business_imports_status ON business_imports(status);
+
 CREATE INDEX IF NOT EXISTS idx_business_status ON businesses(status);
 CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
 CREATE INDEX IF NOT EXISTS idx_books_status ON books(status);
@@ -1061,6 +1074,252 @@ app.get('/api/admin/all', requireAdmin, (req, res) => {
     )
     .all();
   res.json({ businesses, events, books, aidResources, aidPosts, bookComments });
+});
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') { cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(cur); cur = '';
+    } else if (ch === '\n') {
+      row.push(cur); rows.push(row); row = []; cur = '';
+    } else if (ch !== '\r') {
+      cur += ch;
+    }
+  }
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(r => r.some(c => c.trim().length));
+}
+
+function normalizeMatch(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+const IMPORT_COLS = ['name', 'category', 'town', 'description', 'address', 'phone', 'email', 'website', 'hours'];
+
+app.get('/api/admin/business-import/template', requireAdmin, (req, res) => {
+  const sample =
+    'name,category,town,description,address,phone,email,website,hours\n' +
+    '"Joe\'s Diner",restaurants,Dixon,"Family-run diner since 1972, breakfast all day.","123 Main St, Dixon, IL","(815) 555-0101",info@example.com,https://example.com,"Mon-Sat 6a-9p"\n' +
+    '"Hometown Hardware",hardware,Amboy,"Hand tools, paint, fencing, fasteners.","42 E Main St, Amboy, IL","(815) 555-0202",,,"Mon-Fri 7a-6p, Sat 8a-4p"\n';
+  res.set('Content-Type', 'text/csv; charset=utf-8');
+  res.set('Content-Disposition', 'attachment; filename="business-import-template.csv"');
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.send(sample);
+});
+
+app.post('/api/admin/business-import', requireAdmin, (req, res) => {
+  const csv = req.body && req.body.csv;
+  if (typeof csv !== 'string' || !csv.trim())
+    return res.status(400).json({ error: 'No CSV content uploaded.' });
+  const rows = parseCSV(csv);
+  if (rows.length < 2)
+    return res.status(400).json({ error: 'CSV needs a header row and at least one data row.' });
+  const header = rows[0].map(h => h.trim().toLowerCase());
+  const colIdx = {};
+  for (const col of IMPORT_COLS) colIdx[col] = header.indexOf(col);
+  if (colIdx.name === -1 || colIdx.town === -1)
+    return res.status(400).json({ error: 'CSV must include at least "name" and "town" columns. See the template.' });
+
+  const cats = db.prepare('SELECT id, name, slug FROM categories').all();
+  const catBySlug = new Map();
+  const catByName = new Map();
+  for (const c of cats) {
+    catBySlug.set(c.slug.toLowerCase(), c);
+    catByName.set(c.name.toLowerCase(), c);
+  }
+
+  const existing = db.prepare('SELECT id, name, town FROM businesses').all();
+  const dupKey = new Map();
+  for (const b of existing) {
+    const k = normalizeMatch(b.name) + '|' + normalizeMatch(b.town || '');
+    dupKey.set(k, b);
+  }
+
+  const batchId = crypto.randomBytes(6).toString('hex');
+  const insert = db.prepare(
+    `INSERT INTO business_imports (uploaded_by, row_data, duplicate_of, status, batch_id)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+
+  const skipped = [];
+  let queued = 0;
+  let conflicts = 0;
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const data = {};
+    for (const col of IMPORT_COLS) {
+      if (colIdx[col] !== -1) data[col] = trim(row[colIdx[col]] || '', col === 'description' ? 4000 : 300);
+    }
+    if (!data.name || !data.town) {
+      skipped.push({ row: i + 1, reason: 'Missing required field (name or town).' });
+      continue;
+    }
+    if (data.category) {
+      const cat =
+        catBySlug.get(data.category.toLowerCase()) ||
+        catByName.get(data.category.toLowerCase());
+      if (cat) {
+        data.category_id = cat.id;
+        data.category_label = cat.name;
+      } else {
+        data.category_label = data.category;
+        data.category_warning = 'No matching category - leave blank or set in admin.';
+      }
+    }
+    const key = normalizeMatch(data.name) + '|' + normalizeMatch(data.town);
+    const dup = dupKey.get(key);
+    if (dup) conflicts++;
+    insert.run(
+      req.session.userId,
+      JSON.stringify(data),
+      dup ? dup.id : null,
+      dup ? 'conflict' : 'pending',
+      batchId
+    );
+    queued++;
+  }
+
+  res.json({
+    ok: true,
+    batch_id: batchId,
+    total_rows: rows.length - 1,
+    queued,
+    conflicts,
+    skipped,
+  });
+});
+
+app.get('/api/admin/business-import', requireAdmin, (req, res) => {
+  const open = db
+    .prepare(
+      `SELECT bi.*, b.name AS existing_name, b.town AS existing_town,
+              b.description AS existing_description, b.address AS existing_address,
+              b.phone AS existing_phone, b.email AS existing_email,
+              b.website AS existing_website, b.hours AS existing_hours,
+              b.category_id AS existing_category_id, b.status AS existing_status,
+              c.name AS existing_category_name
+       FROM business_imports bi
+       LEFT JOIN businesses b ON b.id = bi.duplicate_of
+       LEFT JOIN categories c ON c.id = b.category_id
+       WHERE bi.status IN ('pending','conflict')
+       ORDER BY bi.uploaded_at, bi.id`
+    )
+    .all();
+  for (const r of open) {
+    try { r.data = JSON.parse(r.row_data); } catch (_) { r.data = {}; }
+    delete r.row_data;
+  }
+  const resolved = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM business_imports WHERE status IN ('applied','rejected')`
+    )
+    .get().n;
+  res.json({ pending: open, resolved_count: resolved });
+});
+
+app.post('/api/admin/business-import/:id/resolve', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const action = req.body && req.body.action;
+  const overrides = (req.body && req.body.fields) || {};
+  const row = db.prepare('SELECT * FROM business_imports WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'Not found.' });
+  if (row.status !== 'pending' && row.status !== 'conflict')
+    return res.status(400).json({ error: 'Row already resolved.' });
+
+  let data;
+  try { data = JSON.parse(row.row_data); } catch (_) {
+    return res.status(400).json({ error: 'Corrupt row data.' });
+  }
+  const merged = { ...data, ...overrides };
+
+  const fail = (msg) => res.status(400).json({ error: msg });
+
+  if (action === 'reject') {
+    db.prepare("UPDATE business_imports SET status='rejected', resolution='rejected' WHERE id=?").run(id);
+    return res.json({ ok: true });
+  }
+
+  if (action === 'keep_existing') {
+    if (row.status !== 'conflict') return fail('Action only valid for conflicts.');
+    db.prepare("UPDATE business_imports SET status='rejected', resolution='kept_existing' WHERE id=?").run(id);
+    return res.json({ ok: true });
+  }
+
+  if (action === 'create' || action === 'add_separate') {
+    if (action === 'add_separate' && row.status !== 'conflict')
+      return fail('add_separate is for conflict rows.');
+    if (action === 'create' && row.status !== 'pending')
+      return fail('create is for new (non-conflict) rows.');
+    if (!merged.name || !merged.town)
+      return fail('Name and town are required.');
+    const slug = uniqueSlug('businesses', slugify(merged.name));
+    const info = db
+      .prepare(
+        `INSERT INTO businesses (name, slug, description, category_id, town, address,
+          phone, email, website, hours, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'approved')`
+      )
+      .run(
+        merged.name,
+        slug,
+        merged.description || null,
+        parseInt(merged.category_id, 10) || null,
+        merged.town || null,
+        merged.address || null,
+        merged.phone || null,
+        merged.email || null,
+        merged.website || null,
+        merged.hours || null
+      );
+    db.prepare(
+      "UPDATE business_imports SET status='applied', resolution=? WHERE id=?"
+    ).run(action === 'create' ? 'created' : 'created_separate', id);
+    return res.json({ ok: true, business_id: info.lastInsertRowid });
+  }
+
+  if (action === 'overwrite') {
+    if (row.status !== 'conflict') return fail('overwrite is for conflict rows.');
+    if (!row.duplicate_of) return fail('No duplicate target.');
+    db.prepare(
+      `UPDATE businesses
+       SET description = COALESCE(?, description),
+           category_id = COALESCE(?, category_id),
+           address = COALESCE(?, address),
+           phone = COALESCE(?, phone),
+           email = COALESCE(?, email),
+           website = COALESCE(?, website),
+           hours = COALESCE(?, hours)
+       WHERE id = ?`
+    ).run(
+      merged.description || null,
+      parseInt(merged.category_id, 10) || null,
+      merged.address || null,
+      merged.phone || null,
+      merged.email || null,
+      merged.website || null,
+      merged.hours || null,
+      row.duplicate_of
+    );
+    db.prepare(
+      "UPDATE business_imports SET status='applied', resolution='overwritten' WHERE id=?"
+    ).run(id);
+    return res.json({ ok: true, business_id: row.duplicate_of });
+  }
+
+  return fail('Unknown action: ' + action);
 });
 
 const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
