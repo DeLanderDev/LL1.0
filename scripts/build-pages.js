@@ -1161,6 +1161,7 @@ pages['admin.html'] = shell({
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" aria-selected="true" data-which="queue">Pending queue</button>
         <button class="tab" role="tab" aria-selected="false" data-which="manage">Manage</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="import">Bulk import</button>
         <button class="tab" role="tab" aria-selected="false" data-which="newsletter">Newsletter</button>
         <button class="tab" role="tab" aria-selected="false" data-which="discussion">Discussion</button>
         <button class="tab" role="tab" aria-selected="false" data-which="donation">Donations</button>
@@ -1184,6 +1185,24 @@ pages['admin.html'] = shell({
         <section><h2>Book comments</h2><div id="m-comments"></div></section>
         <section><h2>Mutual aid: resources</h2><div id="m-aid-resources"></div></section>
         <section><h2>Mutual aid: needs &amp; offers</h2><div id="m-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-import" class="panel" hidden>
+        <h2>Bulk import businesses from a CSV</h2>
+        <p>Upload a CSV with one row per business. Every imported row lands here for you to review and approve one at a time - nothing is added to the directory until you click Approve. Rows that look like an existing listing are flagged as conflicts and shown side-by-side. Existing listings are <strong>never</strong> overwritten unless you explicitly choose "Use uploaded info".</p>
+        <p class="small">CSV columns (header row required): <code>name, category, town, description, address, phone, email, website, hours</code>. <code>name</code> and <code>town</code> are required on each row. <a href="/api/admin/business-import/template">Download a starter template</a>.</p>
+        <form id="import-form" class="card" novalidate>
+          <div class="form-row">
+            <label for="import-file">CSV file</label>
+            <input id="import-file" type="file" accept=".csv,text/csv,text/plain">
+          </div>
+          <button type="submit" class="btn">Upload &amp; stage</button>
+          <div id="import-msg" class="notice small" hidden></div>
+        </form>
+
+        <h3 style="margin-top:1.5em">To review</h3>
+        <p class="small dim">Click Approve to add to the directory. Click Reject to drop the row.</p>
+        <div id="import-queue"></div>
       </div>
 
       <div id="panel-newsletter" class="panel" hidden>
@@ -1602,6 +1621,127 @@ pages['admin.html'] = shell({
         LL.notice('#logo-msg', err.message, 'error');
       }
     });
+
+    document.getElementById('import-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const file = document.getElementById('import-file').files[0];
+      if (!file) { LL.notice('#import-msg', 'Pick a CSV file first.', 'error'); return; }
+      const text = await file.text();
+      try {
+        const r = await LL.api('/api/admin/business-import', {
+          method: 'POST', body: { csv: text }
+        });
+        let msg = 'Staged ' + r.queued + ' row' + (r.queued === 1 ? '' : 's') + '.';
+        if (r.conflicts) msg += ' ' + r.conflicts + ' look like duplicates of existing listings.';
+        if (r.skipped && r.skipped.length) msg += ' Skipped ' + r.skipped.length + ' bad rows.';
+        LL.notice('#import-msg', msg, 'success');
+        document.getElementById('import-file').value = '';
+        await loadImport();
+      } catch (err) {
+        LL.notice('#import-msg', err.message, 'error');
+      }
+    });
+
+    function importField(label, val) {
+      return val ? '<div class="meta"><strong>' + label + ':</strong> ' + LL.escape(val) + '</div>' : '';
+    }
+
+    function importNewCard(r) {
+      const d = r.data || {};
+      const catWarn = d.category_warning
+        ? '<div class="notice small" style="margin:.4em 0">' + LL.escape(d.category_warning) + '</div>'
+        : '';
+      return '<article class="card" style="margin-bottom:1em">' +
+        '<div class="meta"><span class="tag" style="background:#d9e1c2;border-color:#a8b88a">New listing</span></div>' +
+        '<h3 style="margin:.2em 0">' + LL.escape(d.name || '(no name)') + '</h3>' +
+        '<div class="meta">' + LL.escape(d.town || '') + (d.category_label ? ' &middot; ' + LL.escape(d.category_label) : '') + '</div>' +
+        catWarn +
+        (d.description ? '<p>' + LL.escape(d.description) + '</p>' : '') +
+        importField('Address', d.address) +
+        importField('Phone', d.phone) +
+        importField('Email', d.email) +
+        importField('Website', d.website) +
+        importField('Hours', d.hours) +
+        '<div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">' +
+        '<button class="btn btn-field" onclick="importResolve(' + r.id + ',\\'create\\')">Approve &amp; publish</button>' +
+        '<button class="btn btn-barn" onclick="importResolve(' + r.id + ',\\'reject\\')">Reject</button>' +
+        '</div></article>';
+    }
+
+    function importConflictCard(r) {
+      const d = r.data || {};
+      const col = (title, fields) =>
+        '<div style="flex:1 1 280px;min-width:0">' +
+          '<div class="meta"><strong>' + title + '</strong></div>' +
+          fields.map(([k, v]) => v ? '<div class="meta"><strong>' + k + ':</strong> ' + LL.escape(v) + '</div>' : '').join('') +
+        '</div>';
+      return '<article class="card" style="margin-bottom:1em">' +
+        '<div class="meta"><span class="tag" style="background:#fff3cf;border-color:#c89c4d">Possible duplicate of an existing listing</span></div>' +
+        '<h3 style="margin:.2em 0">' + LL.escape(d.name || '(no name)') + '</h3>' +
+        '<div class="meta">' + LL.escape(d.town || '') + '</div>' +
+        '<div style="display:flex;gap:1.2rem;flex-wrap:wrap;margin-top:.6em">' +
+          col('Existing on the site', [
+            ['Description', r.existing_description],
+            ['Category', r.existing_category_name],
+            ['Address', r.existing_address],
+            ['Phone', r.existing_phone],
+            ['Email', r.existing_email],
+            ['Website', r.existing_website],
+            ['Hours', r.existing_hours],
+          ]) +
+          col('From the upload', [
+            ['Description', d.description],
+            ['Category', d.category_label],
+            ['Address', d.address],
+            ['Phone', d.phone],
+            ['Email', d.email],
+            ['Website', d.website],
+            ['Hours', d.hours],
+          ]) +
+        '</div>' +
+        '<div style="margin-top:.8em;display:flex;gap:.4em;flex-wrap:wrap">' +
+        '<button class="btn btn-field" onclick="importResolve(' + r.id + ',\\'overwrite\\')">Use uploaded info</button>' +
+        '<button class="btn btn-secondary" onclick="importResolve(' + r.id + ',\\'keep_existing\\')">Keep existing</button>' +
+        '<button class="btn btn-secondary" onclick="importResolve(' + r.id + ',\\'add_separate\\')">Add as separate listing</button>' +
+        '<button class="btn btn-barn" onclick="importResolve(' + r.id + ',\\'reject\\')">Reject row</button>' +
+        '</div></article>';
+    }
+
+    async function loadImport() {
+      const root = document.getElementById('import-queue');
+      try {
+        const { pending } = await LL.api('/api/admin/business-import');
+        if (!pending.length) {
+          root.innerHTML = '<p class="dim">Nothing waiting. Upload a CSV above to stage rows.</p>';
+          return;
+        }
+        root.innerHTML = pending.map(r =>
+          r.status === 'conflict' ? importConflictCard(r) : importNewCard(r)
+        ).join('');
+      } catch (err) {
+        root.innerHTML = '<p class="dim">Could not load: ' + LL.escape(err.message) + '</p>';
+      }
+    }
+    window.importResolve = async function (id, action) {
+      const labels = {
+        create: 'Add this listing to the directory?',
+        overwrite: 'Overwrite the existing listing with the uploaded info?',
+        keep_existing: 'Drop this CSV row and keep the existing listing as-is?',
+        add_separate: 'Add the CSV row as a separate listing alongside the existing one?',
+        reject: 'Discard this row?',
+      };
+      if (!confirm(labels[action] || 'Confirm?')) return;
+      try {
+        await LL.api('/api/admin/business-import/' + id + '/resolve', {
+          method: 'POST', body: { action }
+        });
+        await loadImport();
+        if (action === 'create' || action === 'overwrite' || action === 'add_separate') {
+          await load();
+        }
+      } catch (err) { alert(err.message); }
+    };
+    loadImport();
 
     load();
   </script>`,
