@@ -1021,6 +1021,61 @@ app.post('/api/admin/business/:id/claim/reject', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/admin/business/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const business = db
+    .prepare(
+      `SELECT b.*, c.name AS category_name, c.slug AS category_slug
+       FROM businesses b LEFT JOIN categories c ON c.id = b.category_id
+       WHERE b.id = ?`
+    )
+    .get(id);
+  if (!business) return res.status(404).json({ error: 'Not found.' });
+  res.json({ business });
+});
+
+app.post('/api/admin/business/:id/edit', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const existing = db.prepare('SELECT * FROM businesses WHERE id = ?').get(id);
+  if (!existing) return res.status(404).json({ error: 'Not found.' });
+
+  const b = req.body || {};
+  const fieldOrCurrent = (val, max, current) =>
+    val === undefined ? current : (trim(val, max) || null);
+
+  const name = trim(b.name, 120) || existing.name;
+  if (!name) return res.status(400).json({ error: 'Name required.' });
+
+  const allowedStatus = ['approved', 'pending', 'rejected'];
+  const status = allowedStatus.includes(b.status) ? b.status : existing.status;
+
+  let categoryId = existing.category_id;
+  if (b.category_id !== undefined) {
+    const n = parseInt(b.category_id, 10);
+    categoryId = Number.isFinite(n) && n > 0 ? n : null;
+  }
+
+  db.prepare(
+    `UPDATE businesses
+     SET name = ?, description = ?, category_id = ?, town = ?, address = ?,
+         phone = ?, email = ?, website = ?, hours = ?, status = ?
+     WHERE id = ?`
+  ).run(
+    name,
+    fieldOrCurrent(b.description, 4000, existing.description),
+    categoryId,
+    fieldOrCurrent(b.town, 80, existing.town),
+    fieldOrCurrent(b.address, 200, existing.address),
+    fieldOrCurrent(b.phone, 40, existing.phone),
+    fieldOrCurrent(b.email, 200, existing.email),
+    fieldOrCurrent(b.website, 300, existing.website),
+    fieldOrCurrent(b.hours, 300, existing.hours),
+    status,
+    id
+  );
+  res.json({ ok: true });
+});
+
 app.post('/api/admin/:type/:id/delete', requireAdmin, (req, res) => {
   const table = DELETABLE[req.params.type];
   if (!table) return res.status(400).json({ error: 'Unknown type: ' + req.params.type });
