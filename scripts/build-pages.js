@@ -1317,6 +1317,83 @@ pages['admin.html'] = shell({
       return '<button class="btn btn-barn" onclick="del(\\'' + type + '\\',' + id + ',\\'' + safe + '\\')">Delete</button>';
     }
 
+    let LL_CATEGORIES = null;
+    const LL_TOWNS = ['Dixon','Amboy','Ashton','Compton','Franklin Grove','Lee Center','Paw Paw','Sublette','West Brooklyn','Harmon','Nelson','Steward','Other (rural Lee County)'];
+    const LL_STATUSES = ['approved','pending','rejected'];
+
+    async function ensureCategories() {
+      if (LL_CATEGORIES) return LL_CATEGORIES;
+      const { categories } = await LL.api('/api/categories');
+      LL_CATEGORIES = categories;
+      return categories;
+    }
+
+    function bizEditForm(b, categories) {
+      const parents = categories.filter(c => !c.parent_id);
+      const catOpts = ['<option value="">- pick one -</option>']
+        .concat(parents.map(p => {
+          const kids = categories.filter(c => c.parent_id === p.id);
+          return '<optgroup label="' + LL.escape(p.name) + '">' +
+            kids.map(k => '<option value="' + k.id + '"' + (k.id === b.category_id ? ' selected' : '') + '>' + LL.escape(k.name) + '</option>').join('') +
+            '</optgroup>';
+        })).join('');
+      const townOpts = ['<option value="">- pick one -</option>'].concat(
+        LL_TOWNS.map(t => '<option' + (t === b.town ? ' selected' : '') + '>' + t + '</option>')
+      ).join('');
+      const statusOpts = LL_STATUSES.map(s =>
+        '<option value="' + s + '"' + (s === b.status ? ' selected' : '') + '>' + s + '</option>'
+      ).join('');
+      return '<form id="biz-edit-' + b.id + '" class="biz-edit-form">' +
+        '<div class="form-row"><label>Name *</label><input name="name" type="text" required maxlength="120" value="' + LL.escape(b.name || '') + '"></div>' +
+        '<div class="form-grid">' +
+          '<div class="form-row"><label>Status</label><select name="status">' + statusOpts + '</select></div>' +
+          '<div class="form-row"><label>Category</label><select name="category_id">' + catOpts + '</select></div>' +
+          '<div class="form-row"><label>Town</label><select name="town">' + townOpts + '</select></div>' +
+        '</div>' +
+        '<div class="form-row"><label>Description</label><textarea name="description" rows="4" maxlength="4000">' + LL.escape(b.description || '') + '</textarea></div>' +
+        '<div class="form-grid">' +
+          '<div class="form-row"><label>Address</label><input name="address" type="text" maxlength="200" value="' + LL.escape(b.address || '') + '"></div>' +
+          '<div class="form-row"><label>Phone</label><input name="phone" type="text" maxlength="40" value="' + LL.escape(b.phone || '') + '"></div>' +
+          '<div class="form-row"><label>Email</label><input name="email" type="email" maxlength="200" value="' + LL.escape(b.email || '') + '"></div>' +
+          '<div class="form-row"><label>Website</label><input name="website" type="url" maxlength="300" value="' + LL.escape(b.website || '') + '"></div>' +
+        '</div>' +
+        '<div class="form-row"><label>Hours</label><input name="hours" type="text" maxlength="300" value="' + LL.escape(b.hours || '') + '"></div>' +
+        '<div style="display:flex;gap:.4em;flex-wrap:wrap">' +
+          '<button type="submit" class="btn btn-field">Save changes</button>' +
+          '<button type="button" class="btn btn-secondary" onclick="bizEditCancel(' + b.id + ')">Cancel</button>' +
+        '</div>' +
+        '<div id="biz-edit-msg-' + b.id + '" class="notice small" hidden></div>' +
+        '</form>';
+    }
+
+    window.bizEdit = async function (id) {
+      const view = document.getElementById('biz-view-' + id);
+      if (!view) return;
+      try {
+        const [{ business: b }, categories] = await Promise.all([
+          LL.api('/api/admin/business/' + id),
+          ensureCategories(),
+        ]);
+        view.innerHTML = bizEditForm(b, categories);
+        const form = document.getElementById('biz-edit-' + id);
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const f = e.currentTarget;
+          const body = {};
+          for (const el of f.elements) if (el.name) body[el.name] = el.value;
+          try {
+            await LL.api('/api/admin/business/' + id + '/edit', { method: 'POST', body });
+            LL.notice('#biz-edit-msg-' + id, 'Saved.', 'success');
+            await load();
+          } catch (err) {
+            LL.notice('#biz-edit-msg-' + id, err.message, 'error');
+          }
+        });
+      } catch (err) { alert(err.message); }
+    };
+
+    window.bizEditCancel = function (id) { load(); };
+
     async function load() {
       const me = (await LL.api('/api/me')).user;
       if (!me || me.role !== 'admin') {
@@ -1389,11 +1466,18 @@ pages['admin.html'] = shell({
       // ---- manage (everything) ----
       const all = await LL.api('/api/admin/all');
       document.getElementById('m-businesses').innerHTML = all.businesses.length
-        ? all.businesses.map(b => row(
-            statusTag(b.status) + ' ' + (b.category_name ? LL.escape(b.category_name) : '') + (b.town ? ' · ' + LL.escape(b.town) : ''),
-            '<h3 style="margin:0"><a href="/directory/' + LL.escape(b.slug) + '">' + LL.escape(b.name) + '</a></h3>',
-            delBtn('business', b.id, b.name)
-          )).join('')
+        ? all.businesses.map(b =>
+            '<article class="card" id="biz-row-' + b.id + '" style="margin-bottom:1em">' +
+              '<div id="biz-view-' + b.id + '">' +
+                '<div class="meta">' + statusTag(b.status) + ' ' + (b.category_name ? LL.escape(b.category_name) : '') + (b.town ? ' · ' + LL.escape(b.town) : '') + '</div>' +
+                '<h3 style="margin:0"><a href="/directory/' + LL.escape(b.slug) + '">' + LL.escape(b.name) + '</a></h3>' +
+                '<div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">' +
+                  '<button class="btn btn-secondary" onclick="bizEdit(' + b.id + ')">Edit</button>' +
+                  delBtn('business', b.id, b.name) +
+                '</div>' +
+              '</div>' +
+            '</article>'
+          ).join('')
         : '<p class="dim">No businesses.</p>';
 
       document.getElementById('m-events').innerHTML = all.events.length
