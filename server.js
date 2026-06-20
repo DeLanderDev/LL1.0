@@ -559,7 +559,7 @@ const DEFAULT_DONATION = {
   url: '',
   url_label: 'Donate',
   message:
-    'Local Lee runs on a small budget. Hosting, the domain, a bit of advertising in the local paper, the occasional coffee for whoever is doing the moderating - any of it that visitors care to chip in toward keeps the lights on.',
+    'Local Lee runs on a small budget. A few of the things we pay for are: hosting, the domain name, a bit of local advertising, supplies for our litter pick-up events, and a small bit of compensation to the people who help keep the site moderated, up to date, and running.',
 };
 
 app.post('/api/register', requireAltcha, (req, res) => {
