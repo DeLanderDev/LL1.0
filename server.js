@@ -10,6 +10,7 @@ const bcrypt = require('bcrypt');
 const Database = require('better-sqlite3');
 const altcha = require('altcha-lib');
 const sanitizeHtml = require('sanitize-html');
+const sharp = require('sharp');
 
 const NEWSLETTER_HTML = {
   allowedTags: [
@@ -420,8 +421,9 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-// 2 MB body to leave room for base64 logo uploads.
-app.use(express.json({ limit: '2mb' }));
+// 12 MB body to leave room for high-res logo uploads (base64 expands ~33%);
+// server resizes & re-compresses before storing.
+app.use(express.json({ limit: '12mb' }));
 app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
@@ -1447,36 +1449,74 @@ app.get('/api/admin/logo', requireAdmin, (req, res) => {
   res.json({ logo: logoMeta() });
 });
 
-app.post('/api/admin/logo', requireAdmin, (req, res) => {
+// Resize the raster logo to a sensible serving size and compress hard.
+// Vector logos (SVG) are kept as-is - already tiny and lose nothing.
+async function processLogo(buf, mime) {
+  if (mime === 'image/svg+xml') return { buf, mime, ext: 'svg' };
+  const pipeline = sharp(buf, { animated: false }).resize({
+    width: 512,
+    height: 512,
+    fit: 'inside',
+    withoutEnlargement: true,
+  });
+  if (mime === 'image/png' || mime === 'image/gif') {
+    const out = await pipeline
+      .png({ compressionLevel: 9, palette: true, quality: 90 })
+      .toBuffer();
+    return { buf: out, mime: 'image/png', ext: 'png' };
+  }
+  if (mime === 'image/webp') {
+    const out = await pipeline.webp({ quality: 86 }).toBuffer();
+    return { buf: out, mime: 'image/webp', ext: 'webp' };
+  }
+  const out = await pipeline
+    .jpeg({ quality: 85, mozjpeg: true })
+    .toBuffer();
+  return { buf: out, mime: 'image/jpeg', ext: 'jpg' };
+}
+
+app.post('/api/admin/logo', requireAdmin, async (req, res) => {
   const dataUrl = req.body && req.body.data;
   if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:'))
     return res.status(400).json({ error: 'Send a base64 data URL in `data`.' });
   const m = dataUrl.match(/^data:([\w/+\-.]+);base64,(.+)$/);
   if (!m) return res.status(400).json({ error: 'Malformed data URL.' });
   const mime = m[1].toLowerCase();
-  const ext = ALLOWED_LOGO_MIMES[mime];
-  if (!ext)
+  if (!ALLOWED_LOGO_MIMES[mime])
     return res
       .status(400)
       .json({ error: 'Unsupported image type. Use PNG, JPEG, SVG, WebP, or GIF.' });
-  let buf;
+  let rawBuf;
   try {
-    buf = Buffer.from(m[2], 'base64');
+    rawBuf = Buffer.from(m[2], 'base64');
   } catch (_) {
     return res.status(400).json({ error: 'Invalid base64.' });
   }
-  if (buf.length > 1024 * 1024)
-    return res.status(413).json({ error: 'Logo must be 1 MB or smaller.' });
+  if (rawBuf.length > 8 * 1024 * 1024)
+    return res.status(413).json({ error: 'Upload must be 8 MB or smaller. The server will resize it.' });
+
+  let processed;
+  try {
+    processed = await processLogo(rawBuf, mime);
+  } catch (err) {
+    return res.status(400).json({ error: 'Could not process image: ' + (err.message || 'unknown error') });
+  }
+
   for (const e of new Set(Object.values(ALLOWED_LOGO_MIMES))) {
     try { fs.unlinkSync(path.join(UPLOAD_DIR, 'logo.' + e)); } catch (_) {}
   }
-  const filename = 'logo.' + ext;
-  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
+  const filename = 'logo.' + processed.ext;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), processed.buf);
   fs.writeFileSync(
     path.join(UPLOAD_DIR, 'logo.json'),
-    JSON.stringify({ file: filename, mime, updated: Date.now() })
+    JSON.stringify({ file: filename, mime: processed.mime, updated: Date.now() })
   );
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    original_bytes: rawBuf.length,
+    stored_bytes: processed.buf.length,
+    stored_mime: processed.mime,
+  });
 });
 
 app.post('/api/admin/logo/reset', requireAdmin, (req, res) => {
@@ -1893,6 +1933,20 @@ app.use((req, res) => {
     return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
   }
   res.status(404).json({ error: 'Not found.' });
+});
+
+// Error handler: convert body-parser-style failures (oversize, bad JSON)
+// into JSON responses for API clients instead of the default HTML page.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Upload is too large. Re-export smaller (under 8 MB) and try again.' });
+  }
+  if (err && err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Could not parse request body.' });
+  }
+  console.error('[error]', err && err.stack || err);
+  res.status(500).json({ error: 'Internal server error.' });
 });
 
 app.listen(PORT, () => {
