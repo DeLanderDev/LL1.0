@@ -1078,6 +1078,163 @@ app.post('/api/admin/business/:id/edit', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+app.get('/api/admin/categories', requireAdmin, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT c.id, c.name, c.slug, c.parent_id, c.sort_order,
+              (SELECT COUNT(*) FROM businesses b WHERE b.category_id = c.id) AS business_count
+       FROM categories c
+       ORDER BY c.parent_id IS NULL DESC, c.sort_order, c.name`
+    )
+    .all();
+  const byId = {};
+  const roots = [];
+  for (const c of rows) { c.children = []; byId[c.id] = c; }
+  for (const c of rows) {
+    if (c.parent_id && byId[c.parent_id]) byId[c.parent_id].children.push(c);
+    else if (!c.parent_id) roots.push(c);
+  }
+  const uncategorized = db
+    .prepare('SELECT COUNT(*) AS n FROM businesses WHERE category_id IS NULL')
+    .get().n;
+  res.json({ categories: roots, uncategorized });
+});
+
+app.post('/api/admin/categories', requireAdmin, (req, res) => {
+  const name = trim(req.body.name, 80);
+  if (!name) return res.status(400).json({ error: 'Name required.' });
+  let parentId = null;
+  if (req.body.parent_id) {
+    const v = parseInt(req.body.parent_id, 10);
+    if (v) {
+      const p = db.prepare('SELECT id, parent_id FROM categories WHERE id = ?').get(v);
+      if (!p) return res.status(400).json({ error: 'Unknown parent category.' });
+      if (p.parent_id)
+        return res.status(400).json({ error: "Sub-categories can't have their own children." });
+      parentId = v;
+    }
+  }
+  const slug = uniqueSlug('categories', slugify(name));
+  const sortOrder = parseInt(req.body.sort_order, 10) || 0;
+  const info = db
+    .prepare(
+      'INSERT INTO categories (name, slug, parent_id, sort_order) VALUES (?, ?, ?, ?)'
+    )
+    .run(name, slug, parentId, sortOrder);
+  res.json({ ok: true, id: info.lastInsertRowid, slug });
+});
+
+app.post('/api/admin/categories/:id/edit', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+  if (!cat) return res.status(404).json({ error: 'Not found.' });
+  const name = trim(req.body.name, 80) || cat.name;
+
+  let parentId = cat.parent_id;
+  if (req.body.parent_id !== undefined) {
+    const raw = req.body.parent_id;
+    const v = raw === '' || raw === null ? null : parseInt(raw, 10);
+    if (v === id) return res.status(400).json({ error: "A category can't be its own parent." });
+    if (v) {
+      const p = db.prepare('SELECT id, parent_id FROM categories WHERE id = ?').get(v);
+      if (!p) return res.status(400).json({ error: 'Unknown parent.' });
+      if (p.parent_id) return res.status(400).json({ error: "Sub-categories can't nest more than two levels deep." });
+      const childCount = db.prepare('SELECT COUNT(*) AS n FROM categories WHERE parent_id = ?').get(id).n;
+      if (childCount > 0)
+        return res
+          .status(400)
+          .json({ error: "This category has sub-categories; move or delete them before nesting it under another." });
+    }
+    parentId = v;
+  }
+
+  let slug = cat.slug;
+  if (req.body.slug && trim(req.body.slug, 80) !== cat.slug) {
+    const newSlug = slugify(trim(req.body.slug, 80));
+    if (newSlug !== cat.slug) {
+      const conflict = db
+        .prepare('SELECT id FROM categories WHERE slug = ? AND id != ?')
+        .get(newSlug, id);
+      if (conflict) return res.status(400).json({ error: 'Slug already in use by another category.' });
+      slug = newSlug;
+    }
+  }
+
+  const sortOrder =
+    req.body.sort_order !== undefined && req.body.sort_order !== ''
+      ? parseInt(req.body.sort_order, 10) || 0
+      : cat.sort_order;
+
+  db.prepare(
+    'UPDATE categories SET name = ?, slug = ?, parent_id = ?, sort_order = ? WHERE id = ?'
+  ).run(name, slug, parentId, sortOrder, id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/categories/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const cat = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+  if (!cat) return res.status(404).json({ error: 'Not found.' });
+  const bizCount = db
+    .prepare('SELECT COUNT(*) AS n FROM businesses WHERE category_id = ?')
+    .get(id).n;
+  if (bizCount > 0)
+    return res
+      .status(400)
+      .json({
+        error:
+          bizCount +
+          ' business' +
+          (bizCount === 1 ? ' uses' : 'es use') +
+          ' this category. Move them or set them uncategorised first.',
+      });
+  const childCount = db
+    .prepare('SELECT COUNT(*) AS n FROM categories WHERE parent_id = ?')
+    .get(id).n;
+  if (childCount > 0)
+    return res
+      .status(400)
+      .json({
+        error:
+          childCount +
+          ' sub-categor' +
+          (childCount === 1 ? 'y' : 'ies') +
+          ' nested under this. Delete or reassign those first.',
+      });
+  db.prepare('DELETE FROM categories WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/uncategorized', requireAdmin, (req, res) => {
+  const businesses = db
+    .prepare(
+      `SELECT b.id, b.name, b.slug, b.town, b.status
+       FROM businesses b WHERE b.category_id IS NULL
+       ORDER BY b.status, b.town, b.name`
+    )
+    .all();
+  const staged = db
+    .prepare(
+      "SELECT row_data FROM business_imports WHERE status IN ('pending','conflict')"
+    )
+    .all();
+  const labelCounts = {};
+  for (const r of staged) {
+    try {
+      const d = JSON.parse(r.row_data);
+      if (d.category_warning && d.category_label) {
+        const key = d.category_label.trim();
+        if (!key) continue;
+        labelCounts[key] = (labelCounts[key] || 0) + 1;
+      }
+    } catch (_) {}
+  }
+  const suggestions = Object.entries(labelCounts)
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  res.json({ businesses, suggestions });
+});
+
 app.post('/api/admin/:type/:id/delete', requireAdmin, (req, res) => {
   const table = DELETABLE[req.params.type];
   if (!table) return res.status(400).json({ error: 'Unknown type: ' + req.params.type });

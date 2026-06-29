@@ -1161,6 +1161,7 @@ pages['admin.html'] = shell({
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" aria-selected="true" data-which="queue">Pending queue</button>
         <button class="tab" role="tab" aria-selected="false" data-which="manage">Manage</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="categories">Categories</button>
         <button class="tab" role="tab" aria-selected="false" data-which="import">Bulk import</button>
         <button class="tab" role="tab" aria-selected="false" data-which="newsletter">Newsletter</button>
         <button class="tab" role="tab" aria-selected="false" data-which="discussion">Discussion</button>
@@ -1185,6 +1186,34 @@ pages['admin.html'] = shell({
         <section><h2>Book comments</h2><div id="m-comments"></div></section>
         <section><h2>Mutual aid: resources</h2><div id="m-aid-resources"></div></section>
         <section><h2>Mutual aid: needs &amp; offers</h2><div id="m-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-categories" class="panel" hidden>
+        <h2>Directory categories</h2>
+        <p class="small dim">Add, rename, or remove the categories businesses get filed under. Top-level categories appear as headers in the directory; sub-categories nest under them. A category can't be deleted while any business or sub-category still points to it.</p>
+
+        <section>
+          <h3>Current categories</h3>
+          <div id="cat-tree"></div>
+        </section>
+
+        <section style="margin-top:1.5em">
+          <h3>Add a category</h3>
+          <form id="cat-add-form" class="card" novalidate>
+            <div class="form-grid">
+              <div class="form-row"><label for="cat-add-name">Name *</label><input id="cat-add-name" name="name" type="text" required maxlength="80"></div>
+              <div class="form-row"><label for="cat-add-parent">Parent <span class="dim small">(leave blank for a top-level category)</span></label><select id="cat-add-parent" name="parent_id"></select></div>
+              <div class="form-row"><label for="cat-add-sort">Sort order</label><input id="cat-add-sort" name="sort_order" type="number" value="0"></div>
+            </div>
+            <button type="submit" class="btn">Add</button>
+            <div id="cat-add-msg" class="notice small" hidden></div>
+          </form>
+        </section>
+
+        <section style="margin-top:1.5em">
+          <h3>Needs attention</h3>
+          <div id="cat-attention"></div>
+        </section>
       </div>
 
       <div id="panel-import" class="panel" hidden>
@@ -1393,6 +1422,137 @@ pages['admin.html'] = shell({
     };
 
     window.bizEditCancel = function (id) { load(); };
+
+    function catRow(c, depth) {
+      const indent = depth ? 'style="margin-left:' + (depth * 1.4) + 'rem"' : '';
+      return '<article class="card" id="cat-row-' + c.id + '" style="margin-bottom:.6em"' +
+        '><div id="cat-view-' + c.id + '" ' + indent + '>' +
+          '<div class="meta">' + (c.parent_id ? '↳ ' : '') + 'sort ' + c.sort_order + ' &middot; <code>' + LL.escape(c.slug) + '</code> &middot; ' + c.business_count + ' business' + (c.business_count === 1 ? '' : 'es') + '</div>' +
+          '<strong>' + LL.escape(c.name) + '</strong>' +
+          '<div style="margin-top:.4em;display:flex;gap:.4em;flex-wrap:wrap">' +
+            '<button class="btn btn-secondary" onclick="catEdit(' + c.id + ')">Edit</button>' +
+            '<button class="btn btn-barn" onclick="catDelete(' + c.id + ',\\'' + (c.name || '').replace(/[\\\\\\'"]/g,'') + '\\')">Delete</button>' +
+          '</div>' +
+        '</div></article>';
+    }
+
+    function flatCats(roots) {
+      const flat = [];
+      for (const r of roots) {
+        flat.push({ c: r, depth: 0 });
+        for (const k of (r.children || [])) flat.push({ c: k, depth: 1 });
+      }
+      return flat;
+    }
+
+    let CAT_DATA = null;
+
+    async function loadCategories() {
+      try {
+        const data = await LL.api('/api/admin/categories');
+        CAT_DATA = data;
+        document.getElementById('cat-tree').innerHTML =
+          flatCats(data.categories).map(({ c, depth }) => catRow(c, depth)).join('') ||
+          '<p class="dim">No categories yet.</p>';
+        const sel = document.getElementById('cat-add-parent');
+        sel.innerHTML =
+          '<option value="">- top-level -</option>' +
+          data.categories.map(p => '<option value="' + p.id + '">' + LL.escape(p.name) + '</option>').join('');
+
+        const att = await LL.api('/api/admin/uncategorized');
+        const attRoot = document.getElementById('cat-attention');
+        const parts = [];
+        if (data.uncategorized > 0) {
+          parts.push('<div class="notice small"><strong>' + data.uncategorized + ' business' + (data.uncategorized === 1 ? '' : 'es') + ' with no category set.</strong></div>');
+          parts.push('<ul class="row-list">' + att.businesses.map(b =>
+            '<li><strong>' + LL.escape(b.name) + '</strong> <span class="tag">' + LL.escape(b.status) + '</span>' +
+            (b.town ? ' <span class="meta">' + LL.escape(b.town) + '</span>' : '') +
+            ' &middot; <a href="/admin#manage" onclick="(function(){const t=document.querySelector(\\'.tab[data-which=manage]\\');if(t)t.click();})()">Edit in Manage tab</a></li>'
+          ).join('') + '</ul>');
+        } else {
+          parts.push('<p class="dim small">Every business has a category. Nice.</p>');
+        }
+        if (att.suggestions.length) {
+          parts.push('<div class="notice small" style="margin-top:1em"><strong>Categories suggested by pending CSV imports</strong> (rows whose <code>category</code> column didn\\'t match anything we have). Click to pre-fill the Add form.</div>');
+          parts.push('<ul class="row-list">' + att.suggestions.map(s =>
+            '<li><a href="#" onclick="catPrefill(\\'' + LL.escape(s.label).replace(/'/g, "\\\\\\'") + '\\');return false;"><strong>' + LL.escape(s.label) + '</strong></a> &middot; <span class="meta">' + s.count + ' pending row' + (s.count === 1 ? '' : 's') + '</span></li>'
+          ).join('') + '</ul>');
+        }
+        attRoot.innerHTML = parts.join('');
+      } catch (err) {
+        document.getElementById('cat-tree').innerHTML = '<p class="dim">Could not load: ' + LL.escape(err.message || err) + '</p>';
+      }
+    }
+
+    window.catPrefill = function (name) {
+      document.getElementById('cat-add-name').value = name;
+      document.getElementById('cat-add-name').focus();
+      document.getElementById('panel-categories').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    window.catEdit = async function (id) {
+      if (!CAT_DATA) await loadCategories();
+      const flat = flatCats(CAT_DATA.categories);
+      const c = flat.find(x => x.c.id === id);
+      if (!c) return;
+      const view = document.getElementById('cat-view-' + id);
+      if (!view) return;
+      const parentOpts = '<option value="">- top-level -</option>' +
+        CAT_DATA.categories
+          .filter(p => p.id !== id)
+          .map(p => '<option value="' + p.id + '"' + (p.id === c.c.parent_id ? ' selected' : '') + '>' + LL.escape(p.name) + '</option>').join('');
+      view.innerHTML =
+        '<form id="cat-edit-' + id + '" class="cat-edit-form">' +
+          '<div class="form-grid">' +
+            '<div class="form-row"><label>Name</label><input name="name" type="text" maxlength="80" required value="' + LL.escape(c.c.name) + '"></div>' +
+            '<div class="form-row"><label>Parent</label><select name="parent_id">' + parentOpts + '</select></div>' +
+            '<div class="form-row"><label>Slug</label><input name="slug" type="text" maxlength="80" value="' + LL.escape(c.c.slug) + '"></div>' +
+            '<div class="form-row"><label>Sort order</label><input name="sort_order" type="number" value="' + c.c.sort_order + '"></div>' +
+          '</div>' +
+          '<div style="display:flex;gap:.4em;flex-wrap:wrap">' +
+            '<button type="submit" class="btn btn-field">Save</button>' +
+            '<button type="button" class="btn btn-secondary" onclick="loadCategories()">Cancel</button>' +
+          '</div>' +
+          '<div id="cat-edit-msg-' + id + '" class="notice small" hidden></div>' +
+        '</form>';
+      document.getElementById('cat-edit-' + id).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = e.currentTarget;
+        const body = {};
+        for (const el of f.elements) if (el.name) body[el.name] = el.value;
+        try {
+          await LL.api('/api/admin/categories/' + id + '/edit', { method: 'POST', body });
+          await loadCategories();
+        } catch (err) { LL.notice('#cat-edit-msg-' + id, err.message, 'error'); }
+      });
+    };
+    window.loadCategories = loadCategories;
+
+    window.catDelete = async function (id, label) {
+      if (!confirm('Delete "' + label + '"?')) return;
+      try {
+        await LL.api('/api/admin/categories/' + id + '/delete', { method: 'POST' });
+        await loadCategories();
+      } catch (err) { alert(err.message); }
+    };
+
+    document.getElementById('cat-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      const body = {};
+      for (const el of f.elements) if (el.name) body[el.name] = el.value;
+      try {
+        await LL.api('/api/admin/categories', { method: 'POST', body });
+        LL.notice('#cat-add-msg', 'Added.', 'success');
+        f.reset();
+        document.getElementById('cat-add-sort').value = '0';
+        await loadCategories();
+      } catch (err) {
+        LL.notice('#cat-add-msg', err.message, 'error');
+      }
+    });
+
+    loadCategories();
 
     async function load() {
       const me = (await LL.api('/api/me')).user;
