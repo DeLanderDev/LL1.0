@@ -130,6 +130,15 @@ CREATE TABLE IF NOT EXISTS aid_resources (
   created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
 );
 
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  email TEXT,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+);
+
 CREATE TABLE IF NOT EXISTS aid_posts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   kind TEXT NOT NULL CHECK(kind IN ('need','offer')),
@@ -328,6 +337,15 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  // 'unsafe-inline' is required by the inline page scripts; the rest still
+  // blocks external script/style/connect targets and plugin content.
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; " +
+      "style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+      "connect-src 'self'; object-src 'none'; base-uri 'self'; " +
+      "frame-ancestors 'self'; form-action 'self'"
+  );
   next();
 });
 
@@ -371,6 +389,63 @@ function trim(s, max = 5000) {
   return s.trim().slice(0, max);
 }
 
+// Accept only http(s) websites; add the scheme when it's missing and drop
+// anything with another scheme (javascript:, data:, …) so submitted URLs
+// are always safe to place in an href.
+function normalizeWebsite(input) {
+  const s = trim(input, 300);
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(s)) return '';
+  return 'https://' + s;
+}
+
+function escapeHtml(s) {
+  return String(s === null || s === undefined ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Fixed-window in-memory rate limiter, keyed by client IP ('trust proxy'
+// is set, so req.ip is the real client behind nginx).
+function rateLimit({ windowMs, max, message }) {
+  const hits = new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, rec] of hits) if (rec.reset <= now) hits.delete(key);
+  }, windowMs).unref();
+  return (req, res, next) => {
+    const now = Date.now();
+    let rec = hits.get(req.ip);
+    if (!rec || rec.reset <= now) {
+      rec = { count: 0, reset: now + windowMs };
+      hits.set(req.ip, rec);
+    }
+    rec.count += 1;
+    if (rec.count > max) {
+      res.set('Retry-After', String(Math.ceil((rec.reset - now) / 1000)));
+      return res
+        .status(429)
+        .json({ error: message || 'Too many requests — try again later.' });
+    }
+    next();
+  };
+}
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many attempts from this address. Try again in a few minutes.',
+});
+const submitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: 'Too many submissions from this address. Try again later.',
+});
+
 function expireAidPosts() {
   const now = Math.floor(Date.now() / 1000);
   db.prepare(
@@ -381,7 +456,7 @@ setInterval(expireAidPosts, 1000 * 60 * 60).unref();
 expireAidPosts();
 
 // ----- Auth API -----
-app.post('/api/register', (req, res) => {
+app.post('/api/register', authLimiter, (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
   const display = trim(req.body.display_name, 80);
@@ -400,13 +475,16 @@ app.post('/api/register', (req, res) => {
        VALUES (?, ?, ?, 'member')`
     )
     .run(email, hash, display || email.split('@')[0]);
-  req.session.userId = info.lastInsertRowid;
-  req.session.role = 'member';
-  req.session.email = email;
-  res.json({ ok: true, role: 'member', email });
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: 'Could not start a session.' });
+    req.session.userId = info.lastInsertRowid;
+    req.session.role = 'member';
+    req.session.email = email;
+    res.json({ ok: true, role: 'member', email });
+  });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', authLimiter, (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
   const user = db
@@ -415,10 +493,13 @@ app.post('/api/login', (req, res) => {
   if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
   const ok = bcrypt.compareSync(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid email or password.' });
-  req.session.userId = user.id;
-  req.session.role = user.role;
-  req.session.email = user.email;
-  res.json({ ok: true, role: user.role, email: user.email });
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: 'Could not start a session.' });
+    req.session.userId = user.id;
+    req.session.role = user.role;
+    req.session.email = user.email;
+    res.json({ ok: true, role: user.role, email: user.email });
+  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -481,7 +562,7 @@ app.get('/api/businesses/:slug', (req, res) => {
   res.json({ business: row });
 });
 
-app.post('/api/businesses', (req, res) => {
+app.post('/api/businesses', submitLimiter, (req, res) => {
   const name = trim(req.body.name, 120);
   if (!name) return res.status(400).json({ error: 'Business name required.' });
   const fields = {
@@ -492,7 +573,7 @@ app.post('/api/businesses', (req, res) => {
     address: trim(req.body.address, 200),
     phone: trim(req.body.phone, 40),
     email: trim(req.body.email, 200),
-    website: trim(req.body.website, 300),
+    website: normalizeWebsite(req.body.website),
     hours: trim(req.body.hours, 300),
   };
   const slug = uniqueSlug('businesses', slugify(name));
@@ -509,8 +590,16 @@ app.post('/api/businesses', (req, res) => {
 
 app.post('/api/businesses/:id/claim', requireAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const biz = db.prepare('SELECT id, claim_status FROM businesses WHERE id = ?').get(id);
+  const biz = db
+    .prepare('SELECT id, claim_status, owner_user_id FROM businesses WHERE id = ?')
+    .get(id);
   if (!biz) return res.status(404).json({ error: 'Not found.' });
+  if (biz.claim_status === 'claimed')
+    return res.status(409).json({
+      error: 'This listing already has a verified owner. Contact us if that’s wrong.',
+    });
+  if (biz.claim_status === 'claim_pending' && biz.owner_user_id !== req.session.userId)
+    return res.status(409).json({ error: 'A claim on this listing is already being reviewed.' });
   db.prepare(
     `UPDATE businesses SET claim_status = 'claim_pending', owner_user_id = ? WHERE id = ?`
   ).run(req.session.userId, id);
@@ -547,7 +636,7 @@ app.get('/api/events/:slug', (req, res) => {
   res.json({ event: e, rsvped });
 });
 
-app.post('/api/events', (req, res) => {
+app.post('/api/events', submitLimiter, (req, res) => {
   const title = trim(req.body.title, 160);
   const startsAt = parseInt(req.body.starts_at, 10);
   if (!title) return res.status(400).json({ error: 'Title required.' });
@@ -574,7 +663,7 @@ app.post('/api/events', (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-app.post('/api/events/:id/rsvp', (req, res) => {
+app.post('/api/events/:id/rsvp', submitLimiter, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const e = db.prepare("SELECT id FROM events WHERE id = ? AND status = 'approved'").get(id);
   if (!e) return res.status(404).json({ error: 'Not found.' });
@@ -619,9 +708,13 @@ app.get('/api/books/:slug', (req, res) => {
     .prepare("SELECT * FROM books WHERE slug = ? AND status = 'approved'")
     .get(req.params.slug);
   if (!b) return res.status(404).json({ error: 'Not found.' });
+  // Never expose commenter email addresses; fall back to the address's
+  // local part as a display name instead.
   const comments = db
     .prepare(
-      `SELECT c.id, c.body, c.created_at, u.display_name, u.email
+      `SELECT c.id, c.body, c.created_at,
+              COALESCE(NULLIF(u.display_name, ''),
+                       substr(u.email, 1, instr(u.email, '@') - 1)) AS display_name
        FROM book_comments c JOIN users u ON u.id = c.user_id
        WHERE c.book_id = ? AND c.status = 'approved' ORDER BY c.created_at DESC`
     )
@@ -629,7 +722,7 @@ app.get('/api/books/:slug', (req, res) => {
   res.json({ book: b, comments });
 });
 
-app.post('/api/books', (req, res) => {
+app.post('/api/books', submitLimiter, (req, res) => {
   const title = trim(req.body.title, 200);
   if (!title) return res.status(400).json({ error: 'Title required.' });
   const slug = uniqueSlug('books', slugify(title));
@@ -651,7 +744,7 @@ app.post('/api/books', (req, res) => {
   res.json({ ok: true, id: info.lastInsertRowid });
 });
 
-app.post('/api/books/:id/comments', requireAuth, (req, res) => {
+app.post('/api/books/:id/comments', requireAuth, submitLimiter, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const body = trim(req.body.body, 4000);
   if (!body) return res.status(400).json({ error: 'Comment cannot be empty.' });
@@ -676,7 +769,7 @@ app.get('/api/aid/resources', (req, res) => {
   res.json({ resources: db.prepare(sql).all(...params) });
 });
 
-app.post('/api/aid/resources', (req, res) => {
+app.post('/api/aid/resources', submitLimiter, (req, res) => {
   const name = trim(req.body.name, 160);
   const category = trim(req.body.category, 80);
   if (!name) return res.status(400).json({ error: 'Name required.' });
@@ -696,7 +789,7 @@ app.post('/api/aid/resources', (req, res) => {
       trim(req.body.town, 80),
       trim(req.body.address, 200),
       trim(req.body.phone, 40),
-      trim(req.body.website, 300),
+      normalizeWebsite(req.body.website),
       trim(req.body.hours, 300),
       trim(req.body.notes, 2000),
       req.session.userId || null
@@ -729,7 +822,7 @@ app.get('/api/aid/posts/:id', (req, res) => {
   res.json({ post: row });
 });
 
-app.post('/api/aid/posts', (req, res) => {
+app.post('/api/aid/posts', submitLimiter, (req, res) => {
   const kind = req.body.kind === 'need' ? 'need' : req.body.kind === 'offer' ? 'offer' : null;
   if (!kind) return res.status(400).json({ error: 'kind must be need or offer.' });
   const title = trim(req.body.title, 160);
@@ -761,13 +854,14 @@ app.post('/api/aid/posts', (req, res) => {
 });
 
 // ----- Contact -----
-app.post('/api/contact', (req, res) => {
+app.post('/api/contact', submitLimiter, (req, res) => {
   const name = trim(req.body.name, 120);
   const email = trim(req.body.email, 254);
   const message = trim(req.body.message, 4000);
   if (!name || !message) return res.status(400).json({ error: 'Name and message required.' });
-  // Persist as an aid post in admin queue? No — log.
-  console.log(`[contact] ${new Date().toISOString()} from=${name}<${email}>: ${message}`);
+  db.prepare(
+    'INSERT INTO contact_messages (name, email, message) VALUES (?, ?, ?)'
+  ).run(name, email, message);
   res.json({ ok: true });
 });
 
@@ -792,7 +886,10 @@ app.get('/api/admin/queue', requireAdmin, (req, res) => {
   const aidPosts = db
     .prepare("SELECT * FROM aid_posts WHERE status = 'pending' ORDER BY created_at DESC")
     .all();
-  res.json({ businesses, events, books, aidResources, aidPosts });
+  const contactMessages = db
+    .prepare("SELECT * FROM contact_messages WHERE status = 'pending' ORDER BY created_at DESC")
+    .all();
+  res.json({ businesses, events, books, aidResources, aidPosts, contactMessages });
 });
 
 const APPROVABLE = {
@@ -801,6 +898,7 @@ const APPROVABLE = {
   book: 'books',
   aidResource: 'aid_resources',
   aidPost: 'aid_posts',
+  contactMessage: 'contact_messages',
 };
 
 app.post('/api/admin/:type/:id/approve', requireAdmin, (req, res) => {
@@ -835,28 +933,40 @@ app.post('/api/admin/business/:id/claim/reject', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// ----- Sitemap & robots & llms.txt (dynamic with current content) -----
+// ----- Sitemap & robots (dynamic with current content) -----
 app.get('/sitemap.xml', (req, res) => {
+  const isoDay = (sec) => new Date(sec * 1000).toISOString().slice(0, 10);
   const urls = [
     '/', '/about', '/contact', '/directory', '/events', '/literature', '/mutual-aid',
-  ];
+  ].map((u) => ({ loc: u }));
   const rows = [
-    ...db.prepare("SELECT slug FROM businesses WHERE status='approved'").all().map(r => `/directory/${r.slug}`),
-    ...db.prepare("SELECT slug FROM events WHERE status='approved'").all().map(r => `/events/${r.slug}`),
-    ...db.prepare("SELECT slug FROM books WHERE status='approved'").all().map(r => `/literature/${r.slug}`),
+    ...db.prepare("SELECT slug, created_at FROM businesses WHERE status='approved'").all()
+      .map((r) => ({ loc: `/directory/${r.slug}`, lastmod: isoDay(r.created_at) })),
+    ...db.prepare("SELECT slug, created_at FROM events WHERE status='approved'").all()
+      .map((r) => ({ loc: `/events/${r.slug}`, lastmod: isoDay(r.created_at) })),
+    ...db.prepare("SELECT slug, created_at FROM books WHERE status='approved'").all()
+      .map((r) => ({ loc: `/literature/${r.slug}`, lastmod: isoDay(r.created_at) })),
   ];
-  const all = urls.concat(rows);
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    all
+    urls.concat(rows)
       .map(
         (u) =>
-          `  <url><loc>${SITE_URL}${u}</loc><changefreq>weekly</changefreq></url>`
+          `  <url><loc>${SITE_URL}${u.loc}</loc>` +
+          (u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : '') +
+          '<changefreq>weekly</changefreq></url>'
       )
       .join('\n') +
     '\n</urlset>\n';
   res.set('Content-Type', 'application/xml').send(xml);
+});
+
+// Served dynamically so the sitemap URL always matches SITE_URL.
+app.get('/robots.txt', (req, res) => {
+  res
+    .type('text/plain')
+    .send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api/\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
 // ----- Pretty routes for slug pages (serve static page; client JS fetches data) -----
@@ -881,18 +991,91 @@ for (const [route, file] of Object.entries(pages)) {
   app.get(route, (req, res) => res.sendFile(path.join(__dirname, 'public', file)));
 }
 
-app.get('/directory/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'business.html'))
-);
-app.get('/events/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'event.html'))
-);
-app.get('/literature/:slug', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'book.html'))
-);
-app.get('/mutual-aid/post/:id', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'aid-post.html'))
-);
+// Detail pages: the client JS still renders the body, but the <head> —
+// title, description, canonical, og: tags — is rewritten server-side from
+// the DB row so each page is individually indexable and shares correctly.
+// Unknown slugs get a real 404 instead of a soft-404 shell.
+const shellCache = new Map();
+function renderShell(file, meta) {
+  let html = shellCache.get(file);
+  if (!html) {
+    html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8');
+    shellCache.set(file, html);
+  }
+  const title = escapeHtml(meta.title);
+  const desc = escapeHtml(String(meta.description || '').slice(0, 160));
+  const url = SITE_URL + meta.path;
+  return html
+    .replace(/<title>[^<]*<\/title>/, () => `<title>${title}</title>`)
+    .replace(/(<meta name="description" content=")[^"]*(">)/, (m, a, b) => a + desc + b)
+    .replace(/(<link rel="canonical" href=")[^"]*(">)/, (m, a, b) => a + url + b)
+    .replace(/(<meta property="og:title" content=")[^"]*(">)/, (m, a, b) => a + title + b)
+    .replace(/(<meta property="og:description" content=")[^"]*(">)/, (m, a, b) => a + desc + b)
+    .replace(/(<meta property="og:url" content=")[^"]*(">)/, (m, a, b) => a + url + b);
+}
+
+function send404(req, res) {
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+}
+
+app.get('/directory/:slug', (req, res) => {
+  const b = db
+    .prepare("SELECT name, slug, description, town FROM businesses WHERE slug = ? AND status = 'approved'")
+    .get(req.params.slug);
+  if (!b) return send404(req, res);
+  res.send(
+    renderShell('business.html', {
+      title: `${b.name} — Local Lee`,
+      description:
+        b.description ||
+        `${b.name} — a locally owned business in ${b.town || 'Lee County'}, Illinois.`,
+      path: `/directory/${b.slug}`,
+    })
+  );
+});
+app.get('/events/:slug', (req, res) => {
+  const e = db
+    .prepare("SELECT title, slug, description, town FROM events WHERE slug = ? AND status = 'approved'")
+    .get(req.params.slug);
+  if (!e) return send404(req, res);
+  res.send(
+    renderShell('event.html', {
+      title: `${e.title} — Local Lee`,
+      description:
+        e.description ||
+        `${e.title} — a community event in ${e.town || 'Lee County'}, Illinois.`,
+      path: `/events/${e.slug}`,
+    })
+  );
+});
+app.get('/literature/:slug', (req, res) => {
+  const b = db
+    .prepare("SELECT title, slug, author, description FROM books WHERE slug = ? AND status = 'approved'")
+    .get(req.params.slug);
+  if (!b) return send404(req, res);
+  res.send(
+    renderShell('book.html', {
+      title: `${b.title} — Local Lee`,
+      description:
+        b.description ||
+        `${b.title}${b.author ? ' by ' + b.author : ''} — on the Local Lee reading list.`,
+      path: `/literature/${b.slug}`,
+    })
+  );
+});
+app.get('/mutual-aid/post/:id', (req, res) => {
+  const p = db
+    .prepare("SELECT id, title, body FROM aid_posts WHERE id = ? AND status = 'approved'")
+    .get(parseInt(req.params.id, 10));
+  if (!p) return send404(req, res);
+  res.send(
+    renderShell('aid-post.html', {
+      title: `${p.title} — Local Lee`,
+      description: p.body,
+      path: `/mutual-aid/post/${p.id}`,
+    })
+  );
+});
 
 // ----- Static -----
 app.use(

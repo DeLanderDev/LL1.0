@@ -6,6 +6,7 @@
   <title>Sign in — Local Lee</title>
   <meta name="description" content="Sign in to Local Lee to comment, claim a business, or post to the mutual-aid board.">
   <link rel="canonical" href="https://locallee.org/login">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <meta property="og:title" content="Sign in — Local Lee">
   <meta property="og:description" content="Sign in to Local Lee to comment, claim a business, or post to the mutual-aid board.">
@@ -102,7 +103,9 @@
           method: 'POST',
           body: { email: f.email.value, password: f.password.value }
         });
-        const next = new URLSearchParams(location.search).get('next') || '/';
+        let next = new URLSearchParams(location.search).get('next') || '/';
+        // Same-site paths only — never redirect off-site or to //host URLs.
+        if (!next.startsWith('/') || next.startsWith('//')) next = '/';
         location.href = next;
       } catch (err) {
         LL.notice('#notice', err.message, 'error');

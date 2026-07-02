@@ -86,6 +86,7 @@ function shell(opts) {
   <title>${title}</title>
   <meta name="description" content="${description}">
   <link rel="canonical" href="https://locallee.org${canonical}">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <meta property="og:title" content="${title}">
   <meta property="og:description" content="${description}">
@@ -537,7 +538,7 @@ pages['book.html'] = shell({
       }
       ul.innerHTML = comments.map(c => \`
         <li>
-          <div class="meta"><strong>\${LL.escape(c.display_name || c.email.split('@')[0])}</strong> · \${LL.escape(LL.formatDate(c.created_at))}</div>
+          <div class="meta"><strong>\${LL.escape(c.display_name || 'Neighbor')}</strong> · \${LL.escape(LL.formatDate(c.created_at))}</div>
           <p>\${LL.escape(c.body)}</p>
         </li>\`).join('');
     }
@@ -696,6 +697,8 @@ pages['aid-post.html'] = shell({
   title: 'Mutual Aid Post — Local Lee',
   description: 'A community mutual-aid post in Lee County, Illinois.',
   canonical: '/mutual-aid',
+  // Aid posts expire after 30 days — keep them out of search indexes.
+  extraHead: '<meta name="robots" content="noindex">',
   main: `    <article id="post" aria-busy="true"><p class="dim">Loading…</p></article>`,
   extraScript: `<script>
     const id = location.pathname.split('/').filter(Boolean).pop();
@@ -758,7 +761,9 @@ pages['login.html'] = shell({
           method: 'POST',
           body: { email: f.email.value, password: f.password.value }
         });
-        const next = new URLSearchParams(location.search).get('next') || '/';
+        let next = new URLSearchParams(location.search).get('next') || '/';
+        // Same-site paths only — never redirect off-site or to //host URLs.
+        if (!next.startsWith('/') || next.startsWith('//')) next = '/';
         location.href = next;
       } catch (err) {
         LL.notice('#notice', err.message, 'error');
@@ -1138,11 +1143,12 @@ pages['admin.html'] = shell({
       <section><h2>Books</h2><div id="q-books"></div></section>
       <section><h2>Mutual aid — resources</h2><div id="q-aid-resources"></div></section>
       <section><h2>Mutual aid — needs &amp; offers</h2><div id="q-aid-posts"></div></section>
+      <section><h2>Contact messages</h2><div id="q-contact"></div></section>
     </div>`,
   extraScript: `<script>
     function row(label, body, actions) {
       return \`<article class="card" style="margin-bottom:1em">
-        <div class="meta">\${label}</div>
+        <div class="meta">\${LL.escape(label)}</div>
         \${body}
         <div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">\${actions}</div>
       </article>\`;
@@ -1226,6 +1232,15 @@ pages['admin.html'] = shell({
             '<button class="btn btn-barn" onclick="action(\\'aidPost\\',' + p.id + ',\\'reject\\')">Reject</button>'
           )).join('')
         : '<p class="dim">Nothing pending.</p>';
+
+      document.getElementById('q-contact').innerHTML = (q.contactMessages || []).length
+        ? q.contactMessages.map(m => row(
+            LL.formatDate(m.created_at),
+            '<h3 style="margin:0">' + LL.escape(m.name) + (m.email ? ' <span class="small dim">&lt;' + LL.escape(m.email) + '&gt;</span>' : '') + '</h3>' +
+              '<p>' + LL.escape(m.message) + '</p>',
+            '<button class="btn btn-field" onclick="action(\\'contactMessage\\',' + m.id + ',\\'approve\\')">Mark handled</button>'
+          )).join('')
+        : '<p class="dim">No new messages.</p>';
     }
     load();
   </script>`,

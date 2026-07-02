@@ -6,6 +6,7 @@
   <title>Book — Local Lee</title>
   <meta name="description" content="A book on the Local Lee reading list.">
   <link rel="canonical" href="https://locallee.org/literature">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <meta property="og:title" content="Book — Local Lee">
   <meta property="og:description" content="A book on the Local Lee reading list.">
@@ -104,7 +105,7 @@
       }
       ul.innerHTML = comments.map(c => `
         <li>
-          <div class="meta"><strong>${LL.escape(c.display_name || c.email.split('@')[0])}</strong> · ${LL.escape(LL.formatDate(c.created_at))}</div>
+          <div class="meta"><strong>${LL.escape(c.display_name || 'Neighbor')}</strong> · ${LL.escape(LL.formatDate(c.created_at))}</div>
           <p>${LL.escape(c.body)}</p>
         </li>`).join('');
     }
