@@ -462,11 +462,14 @@ const PRERELEASE_ALLOW_EXACT = new Set([
   '/api/login', '/api/logout', '/api/me', '/api/prerelease',
 ]);
 
+const DEFAULT_FORMSPREE_URL = 'https://formspree.io/f/xrenpwlk';
+
 function prereleaseSettings() {
+  const saved = getSetting('prerelease', {});
   return {
     enabled: false,
-    formspree_url: '',
-    ...getSetting('prerelease', {}),
+    ...saved,
+    formspree_url: saved.formspree_url || DEFAULT_FORMSPREE_URL,
   };
 }
 
