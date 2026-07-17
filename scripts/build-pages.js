@@ -1167,6 +1167,7 @@ pages['admin.html'] = shell({
         <button class="tab" role="tab" aria-selected="false" data-which="discussion">Discussion</button>
         <button class="tab" role="tab" aria-selected="false" data-which="donation">Donations</button>
         <button class="tab" role="tab" aria-selected="false" data-which="logo">Logo</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="launch">Launch page</button>
       </div>
 
       <div id="panel-queue" class="panel">
@@ -1261,6 +1262,27 @@ pages['admin.html'] = shell({
         <h2>Threads</h2>
         <p class="dim small">Lock a thread to stop new replies; delete to remove the whole thread (and its replies).</p>
         <div id="d-threads"></div>
+      </div>
+
+      <div id="panel-launch" class="panel" hidden>
+        <h2>Pre-release launch page</h2>
+        <p>When enabled, every visitor sees the under-construction launch page (with the community report form) instead of the site. You and any other signed-in admins still see the full site, and <code>/login</code> stays reachable so you can always get back in. <a href="/launch" target="_blank">Preview the launch page</a>.</p>
+        <form id="launch-form" class="card" novalidate>
+          <div class="form-row">
+            <label style="display:flex;align-items:center;gap:.5em;font-weight:600">
+              <input id="launch-enabled" type="checkbox" style="width:auto">
+              Launch page is ON (site hidden from visitors)
+            </label>
+          </div>
+          <div class="form-row">
+            <label for="launch-formspree">Formspree endpoint for the report form</label>
+            <input id="launch-formspree" type="url" maxlength="300" placeholder="https://formspree.io/f/yourFormId">
+            <p class="hint">Create a free form at formspree.io, then paste its endpoint URL here. Until this is set, the launch page shows an email address instead of the form.</p>
+          </div>
+          <button type="submit" class="btn">Save</button>
+          <div id="launch-msg" class="notice small" hidden></div>
+        </form>
+        <div id="launch-status" class="notice" hidden></div>
       </div>
 
       <div id="panel-donation" class="panel" hidden>
@@ -1831,6 +1853,40 @@ pages['admin.html'] = shell({
         LL.notice('#don-status', 'Saved.', 'success');
       } catch (err) { LL.notice('#don-status', err.message, 'error'); }
     });
+
+    async function loadLaunch() {
+      try {
+        const pre = await LL.api('/api/prerelease');
+        document.getElementById('launch-enabled').checked = !!pre.enabled;
+        document.getElementById('launch-formspree').value = pre.formspree_url || '';
+        const status = document.getElementById('launch-status');
+        if (pre.enabled) {
+          status.textContent = 'Launch page is currently ON - visitors see the under-construction page, not the site.';
+          status.hidden = false;
+        } else {
+          status.hidden = true;
+        }
+      } catch (_) {}
+    }
+    document.getElementById('launch-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const enabled = document.getElementById('launch-enabled').checked;
+      if (enabled && !confirm('Turn ON the launch page? Visitors will no longer be able to see the site until you turn it back off.')) return;
+      try {
+        await LL.api('/api/admin/prerelease', {
+          method: 'POST',
+          body: {
+            enabled,
+            formspree_url: document.getElementById('launch-formspree').value,
+          },
+        });
+        LL.notice('#launch-msg', 'Saved.', 'success');
+        await loadLaunch();
+      } catch (err) {
+        LL.notice('#launch-msg', err.message, 'error');
+      }
+    });
+    loadLaunch();
 
     // ---- logo upload ----
     document.getElementById('logo-form').addEventListener('submit', async (e) => {
