@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local Lee - Coming Soon</title>
+  <meta name="description" content="The Local Lee project - a community website for Lee County, Illinois. Under construction.">
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="/brand-mark" type="image/png">
+</head>
+<body>
+  <main class="narrow" style="max-width: 640px; margin: 0 auto; padding: 3rem 1.5rem;">
+    <div style="text-align: center; margin-bottom: 2rem;">
+      <img src="/brand-mark" alt="Local Lee" width="140" height="140" style="border-radius: 8px;">
+      <h1 style="margin-top: 1rem;">Welcome to the Local Lee project</h1>
+      <p class="lede" style="font-size: 1.15rem; color: var(--ink-soft);">This website is still under construction.</p>
+    </div>
+
+    <div class="card">
+      <p>The form below is for you to report issues affecting the Lee County community.</p>
+      <p class="small dim">Corruption tips, local news, breaking stories, or anything else that matters to Lee County. You can leave the name and contact fields blank if you'd rather stay anonymous.</p>
+
+      <div id="sent-note" class="notice success" hidden>Thank you. Your report has been received.</div>
+
+      <form id="tip-form" method="POST" action="" hidden>
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="t-name">Your name <span class="dim small">(optional)</span></label>
+            <input id="t-name" name="name" type="text" maxlength="120" autocomplete="name">
+          </div>
+          <div class="form-row">
+            <label for="t-contact">Email or phone <span class="dim small">(optional, if you want a reply)</span></label>
+            <input id="t-contact" name="contact" type="text" maxlength="200">
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="t-topic">What kind of report is this?</label>
+          <select id="t-topic" name="topic">
+            <option>Local issue</option>
+            <option>Corruption tip</option>
+            <option>Local news</option>
+            <option>Breaking story</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="t-message">Your report *</label>
+          <textarea id="t-message" name="message" rows="6" required maxlength="5000"></textarea>
+        </div>
+        <input type="hidden" name="_subject" value="Local Lee community report">
+        <button type="submit" class="btn">Send report</button>
+      </form>
+
+      <div id="no-form-note" class="notice" hidden>
+        The report form isn't hooked up yet. Check back soon, or email
+        <a href="mailto:contact@locallee.org">contact@locallee.org</a>.
+      </div>
+    </div>
+
+    <p class="small dim center" style="margin-top: 2rem;">Local Lee - Lee County, Illinois</p>
+  </main>
+
+  <script>
+    (async () => {
+      const params = new URLSearchParams(location.search);
+      if (params.get('sent') === '1') {
+        document.getElementById('sent-note').hidden = false;
+      }
+      try {
+        const r = await fetch('/api/prerelease');
+        const { formspree_url } = await r.json();
+        if (formspree_url) {
+          const form = document.getElementById('tip-form');
+          form.action = formspree_url;
+          const next = document.createElement('input');
+          next.type = 'hidden';
+          next.name = '_next';
+          next.value = location.origin + '/?sent=1';
+          form.appendChild(next);
+          form.hidden = false;
+        } else {
+          document.getElementById('no-form-note').hidden = false;
+        }
+      } catch (_) {
+        document.getElementById('no-form-note').hidden = false;
+      }
+    })();
+  </script>
+</body>
+</html>

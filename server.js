@@ -450,6 +450,45 @@ app.use((req, res, next) => {
   next();
 });
 
+// Pre-release gate. When enabled from admin, every visitor-facing route
+// serves the launch page instead. Admins bypass it entirely; the login
+// path and the assets the launch/login/admin pages need stay reachable
+// so the site can still be administered while gated.
+const PRERELEASE_ALLOW_PREFIXES = [
+  '/css/', '/js/', '/img/', '/avatar/',
+];
+const PRERELEASE_ALLOW_EXACT = new Set([
+  '/launch', '/login', '/admin', '/brand-mark',
+  '/api/login', '/api/logout', '/api/me', '/api/prerelease',
+]);
+
+function prereleaseSettings() {
+  return {
+    enabled: false,
+    formspree_url: '',
+    ...getSetting('prerelease', {}),
+  };
+}
+
+app.use((req, res, next) => {
+  const pre = prereleaseSettings();
+  if (!pre.enabled) return next();
+  if (req.session && req.session.role === 'admin') return next();
+  const p = req.path;
+  if (PRERELEASE_ALLOW_EXACT.has(p)) return next();
+  if (PRERELEASE_ALLOW_PREFIXES.some((pref) => p.startsWith(pref))) return next();
+  if (p.startsWith('/api/admin/')) return next(); // requireAdmin guards these anyway
+  if (p === '/robots.txt') {
+    res.set('Content-Type', 'text/plain');
+    return res.send('User-agent: *\nDisallow: /\n');
+  }
+  if (p.startsWith('/api/')) {
+    return res.status(503).json({ error: 'The site is not open yet.' });
+  }
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.status(200).sendFile(path.join(__dirname, 'public', 'launch.html'));
+});
+
 function slugify(input) {
   return String(input || '')
     .toLowerCase()
@@ -1896,6 +1935,34 @@ app.post('/api/admin/donation', requireAdmin, (req, res) => {
   res.json({ ok: true, donation: next });
 });
 
+// Public: the launch page reads this to find the tip-form endpoint.
+// Only exposes what the launch page needs.
+app.get('/api/prerelease', (req, res) => {
+  const pre = prereleaseSettings();
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.json({ enabled: pre.enabled, formspree_url: pre.formspree_url });
+});
+
+app.post('/api/admin/prerelease', requireAdmin, (req, res) => {
+  const current = prereleaseSettings();
+  let formspreeUrl = current.formspree_url;
+  if (req.body.formspree_url !== undefined) {
+    const raw = trim(req.body.formspree_url, 300);
+    if (raw && !/^https:\/\/formspree\.io\//i.test(raw)) {
+      return res
+        .status(400)
+        .json({ error: 'That does not look like a Formspree endpoint (expected https://formspree.io/f/...).' });
+    }
+    formspreeUrl = raw;
+  }
+  const next = {
+    enabled: req.body.enabled === undefined ? current.enabled : !!req.body.enabled,
+    formspree_url: formspreeUrl,
+  };
+  setSetting('prerelease', next);
+  res.json({ ok: true, prerelease: next });
+});
+
 const AVATAR_DIR = path.join(DATA_DIR, 'avatars');
 if (!fs.existsSync(AVATAR_DIR)) fs.mkdirSync(AVATAR_DIR, { recursive: true });
 
@@ -2057,6 +2124,7 @@ const pages = {
   '/discussion/new': 'discussion-new.html',
   '/donate': 'donate.html',
   '/profile': 'profile.html',
+  '/launch': 'launch.html',
 };
 function sendHtml(res, file) {
   res.set('Cache-Control', 'no-cache, must-revalidate');
