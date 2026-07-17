@@ -421,12 +421,49 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-// 12 MB body to leave room for high-res logo uploads (base64 expands ~33%);
-// server resizes & re-compresses before storing.
-app.use(express.json({ limit: '12mb' }));
-app.use(express.urlencoded({ extended: true, limit: '256kb' }));
+// Body parsers are registered after the session middleware below, so
+// the big-body admin routes can refuse to parse for non-admins.
 
 const COOKIE_SECURE = process.env.COOKIE_SECURE === 'true';
+
+// Small sliding-window rate limiter, per IP. Buckets prune themselves
+// on each sweep so memory stays bounded.
+function makeRateLimiter({ windowMs, max, message }) {
+  const hits = new Map();
+  setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [key, times] of hits) {
+      const kept = times.filter((t) => t > cutoff);
+      if (kept.length) hits.set(key, kept);
+      else hits.delete(key);
+    }
+  }, windowMs).unref();
+  return (req, res, next) => {
+    const key = req.ip || 'unknown';
+    const now = Date.now();
+    const cutoff = now - windowMs;
+    const times = (hits.get(key) || []).filter((t) => t > cutoff);
+    if (times.length >= max) {
+      res.set('Retry-After', String(Math.ceil(windowMs / 1000)));
+      return res.status(429).json({ error: message });
+    }
+    times.push(now);
+    hits.set(key, times);
+    next();
+  };
+}
+
+const loginLimiter = makeRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many sign-in attempts. Wait a few minutes and try again.',
+});
+
+const writeLimiter = makeRateLimiter({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: 'Too many requests. Slow down a little and try again.',
+});
 
 app.use(
   session({
@@ -449,6 +486,30 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   next();
 });
+
+// Big bodies are only legitimate on authenticated upload routes; the
+// admin check runs before parsing so anonymous requests can't tie up
+// memory with oversized payloads.
+function adminGateBeforeBody(req, res, next) {
+  if (req.session && req.session.role === 'admin') return next();
+  return res.status(403).json({ error: 'Admin only.' });
+}
+function authGateBeforeBody(req, res, next) {
+  if (req.session && req.session.userId) return next();
+  return res.status(401).json({ error: 'Sign in required.' });
+}
+app.use((req, res, next) => {
+  if (req.method !== 'POST') return next();
+  if (req.path === '/api/login') return loginLimiter(req, res, next);
+  if (req.session && req.session.role === 'admin') return next();
+  return writeLimiter(req, res, next);
+});
+
+app.use('/api/admin/logo', adminGateBeforeBody, express.json({ limit: '12mb' }));
+app.use('/api/admin/business-import', adminGateBeforeBody, express.json({ limit: '4mb' }));
+app.use('/api/me/avatar', authGateBeforeBody, express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '256kb' }));
+app.use(express.urlencoded({ extended: true, limit: '256kb' }));
 
 // Pre-release gate. When enabled from admin, every visitor-facing route
 // serves the launch page instead. Admins bypass it entirely; the login
@@ -529,6 +590,17 @@ function requireAdmin(req, res, next) {
 function trim(s, max = 5000) {
   if (typeof s !== 'string') return '';
   return s.trim().slice(0, max);
+}
+
+// Websites render as clickable links, so only allow http(s). A bare
+// domain gets https:// prefixed; anything else (javascript:, data:,
+// etc.) is dropped.
+function safeUrl(s, max = 300) {
+  const raw = trim(s, max);
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (/^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}([/?#].*)?$/i.test(raw)) return 'https://' + raw;
+  return '';
 }
 
 function expireAidPosts() {
@@ -625,10 +697,13 @@ app.post('/api/register', requireAltcha, (req, res) => {
        VALUES (?, ?, ?, 'member')`
     )
     .run(email, hash, display || email.split('@')[0]);
-  req.session.userId = info.lastInsertRowid;
-  req.session.role = 'member';
-  req.session.email = email;
-  res.json({ ok: true, role: 'member', email });
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: 'Could not start session.' });
+    req.session.userId = info.lastInsertRowid;
+    req.session.role = 'member';
+    req.session.email = email;
+    res.json({ ok: true, role: 'member', email });
+  });
 });
 
 app.post('/api/login', (req, res) => {
@@ -640,10 +715,13 @@ app.post('/api/login', (req, res) => {
   if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
   const ok = bcrypt.compareSync(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid email or password.' });
-  req.session.userId = user.id;
-  req.session.role = user.role;
-  req.session.email = user.email;
-  res.json({ ok: true, role: user.role, email: user.email });
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: 'Could not start session.' });
+    req.session.userId = user.id;
+    req.session.role = user.role;
+    req.session.email = user.email;
+    res.json({ ok: true, role: user.role, email: user.email });
+  });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -720,7 +798,7 @@ app.post('/api/businesses', requireAltcha, (req, res) => {
     address: trim(req.body.address, 200),
     phone: trim(req.body.phone, 40),
     email: trim(req.body.email, 200),
-    website: trim(req.body.website, 300),
+    website: safeUrl(req.body.website),
     hours: trim(req.body.hours, 300),
   };
   const slug = uniqueSlug('businesses', slugify(name));
@@ -921,7 +999,7 @@ app.post('/api/aid/resources', requireAltcha, (req, res) => {
       trim(req.body.town, 80),
       trim(req.body.address, 200),
       trim(req.body.phone, 40),
-      trim(req.body.website, 300),
+      safeUrl(req.body.website),
       trim(req.body.hours, 300),
       trim(req.body.notes, 2000),
       req.session.userId || null
@@ -1112,7 +1190,7 @@ app.post('/api/admin/business/:id/edit', requireAdmin, (req, res) => {
     fieldOrCurrent(b.address, 200, existing.address),
     fieldOrCurrent(b.phone, 40, existing.phone),
     fieldOrCurrent(b.email, 200, existing.email),
-    fieldOrCurrent(b.website, 300, existing.website),
+    b.website === undefined ? existing.website : (safeUrl(b.website) || null),
     fieldOrCurrent(b.hours, 300, existing.hours),
     status,
     id
@@ -1537,7 +1615,7 @@ app.post('/api/admin/business-import/:id/resolve', requireAdmin, (req, res) => {
         merged.address || null,
         merged.phone || null,
         merged.email || null,
-        merged.website || null,
+        safeUrl(merged.website) || null,
         merged.hours || null
       );
     db.prepare(
@@ -1565,7 +1643,7 @@ app.post('/api/admin/business-import/:id/resolve', requireAdmin, (req, res) => {
       merged.address || null,
       merged.phone || null,
       merged.email || null,
-      merged.website || null,
+      safeUrl(merged.website) || null,
       merged.hours || null,
       row.duplicate_of
     );
@@ -2168,7 +2246,7 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   if (res.headersSent) return next(err);
   if (err && err.type === 'entity.too.large') {
-    return res.status(413).json({ error: 'Upload is too large. Re-export smaller (under 8 MB) and try again.' });
+    return res.status(413).json({ error: 'Request is too large.' });
   }
   if (err && err.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'Could not parse request body.' });

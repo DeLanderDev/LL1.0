@@ -134,6 +134,7 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   log "Generating ${ENV_FILE} (first deploy)…"
   SESSION_SECRET="$(openssl rand -hex 32 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -d '\n=')"
   ADMIN_PASSWORD="${ADMIN_PASSWORD:-$(openssl rand -base64 18 2>/dev/null | tr -d '/+=')}"
+  ALTCHA_HMAC="$(openssl rand -hex 32 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -d '\n=')"
   umask 077
   cat > "${ENV_FILE}" <<EOF
 # Local Lee — production environment. Mode 640. Do not commit.
@@ -144,6 +145,7 @@ SESSION_SECRET=${SESSION_SECRET}
 ADMIN_EMAIL=${ADMIN_EMAIL}
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 COOKIE_SECURE=${COOKIE_SECURE_VALUE}
+ALTCHA_HMAC=${ALTCHA_HMAC}
 EOF
   chown root:"${APP_USER}" "${ENV_FILE}"
   chmod 640 "${ENV_FILE}"
@@ -159,6 +161,9 @@ else
     sed -i "s/^COOKIE_SECURE=.*/COOKIE_SECURE=${COOKIE_SECURE_VALUE}/" "${ENV_FILE}"
   else
     echo "COOKIE_SECURE=${COOKIE_SECURE_VALUE}" >> "${ENV_FILE}"
+  fi
+  if ! grep -q '^ALTCHA_HMAC=' "${ENV_FILE}"; then
+    echo "ALTCHA_HMAC=$(openssl rand -hex 32 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -d '\n=')" >> "${ENV_FILE}"
   fi
 fi
 
