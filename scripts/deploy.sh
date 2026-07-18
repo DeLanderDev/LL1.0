@@ -230,7 +230,11 @@ log "Service is listening on 127.0.0.1:${APP_PORT}."
 # --------------------------------------------------------------- nginx site
 if command -v nginx >/dev/null; then
   log "Writing nginx site to ${NGINX_AVAIL}…"
-  SERVER_NAME_LINE="server_name ${DOMAIN:-_};"
+  if [[ -n "${DOMAIN}" ]]; then
+    SERVER_NAME_LINE="server_name ${DOMAIN} www.${DOMAIN};"
+  else
+    SERVER_NAME_LINE="server_name _;"
+  fi
   cat > "${NGINX_AVAIL}" <<EOF
 # Local Lee — proxies a domain to the Node service on 127.0.0.1:${APP_PORT}.
 # Lives at ${NGINX_AVAIL}; symlink into sites-enabled to activate.
@@ -267,7 +271,7 @@ EOF
     if nginx -t >/dev/null 2>&1; then
       systemctl reload nginx
       log "nginx reloaded. Now point DNS for ${DOMAIN} at this droplet, then run:"
-      log "  certbot --nginx -d ${DOMAIN}"
+      log "  certbot --nginx -d ${DOMAIN} -d www.${DOMAIN}"
     else
       warn "nginx config test failed; not reloading. Run 'nginx -t' to investigate."
     fi
