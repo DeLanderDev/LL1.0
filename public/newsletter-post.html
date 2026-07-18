@@ -128,15 +128,6 @@
         const data = await LL.api('/api/newsletter/' + encodeURIComponent(slug));
         post = data.post;
         document.title = post.title + ' - Local Lee';
-        const ld = {
-          '@context': 'https://schema.org', '@type': 'BlogPosting',
-          headline: post.title, datePublished: new Date((post.published_at || post.created_at) * 1000).toISOString(),
-          author: post.author_name ? { '@type': 'Person', name: post.author_name } : undefined
-        };
-        const ldEl = document.createElement('script');
-        ldEl.type = 'application/ld+json';
-        ldEl.textContent = JSON.stringify(ld);
-        document.head.appendChild(ldEl);
         const looksLikeHtml = /<[a-z][\s\S]*>/i.test(post.body || '');
         const bodyHtml = looksLikeHtml
           ? post.body

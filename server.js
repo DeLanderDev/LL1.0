@@ -1726,10 +1726,18 @@ app.get('/api/admin/logo', requireAdmin, (req, res) => {
   res.json({ logo: logoMeta() });
 });
 
-// Resize the raster logo to a sensible serving size and compress hard.
-// Vector logos (SVG) are kept as-is - already tiny and lose nothing.
+// Resize the logo to a sensible serving size and compress hard.
+// SVGs are rasterized to PNG: an SVG document can carry scripts, and
+// /brand-mark is directly navigable, so serving uploaded SVG verbatim
+// would be a stored-XSS vector.
 async function processLogo(buf, mime) {
-  if (mime === 'image/svg+xml') return { buf, mime, ext: 'svg' };
+  if (mime === 'image/svg+xml') {
+    const out = await sharp(buf, { density: 300 })
+      .resize({ width: 512, height: 512, fit: 'inside', withoutEnlargement: false })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    return { buf: out, mime: 'image/png', ext: 'png' };
+  }
   const pipeline = sharp(buf, { animated: false }).resize({
     width: 512,
     height: 512,
@@ -2158,25 +2166,33 @@ app.post('/api/me/avatar/reset', requireAuth, (req, res) => {
 });
 
 app.get('/sitemap.xml', (req, res) => {
-  const urls = [
-    '/', '/about', '/contact', '/directory', '/events', '/literature', '/mutual-aid',
-  ];
-  const rows = [
-    ...db.prepare("SELECT slug FROM businesses WHERE status='approved'").all().map(r => `/directory/${r.slug}`),
-    ...db.prepare("SELECT slug FROM events WHERE status='approved'").all().map(r => `/events/${r.slug}`),
-    ...db.prepare("SELECT slug FROM books WHERE status='approved'").all().map(r => `/literature/${r.slug}`),
-    ...db.prepare("SELECT slug FROM newsletters WHERE status='published'").all().map(r => `/newsletter/${r.slug}`),
-    ...db.prepare('SELECT slug FROM threads').all().map(r => `/discussion/${r.slug}`),
-    '/newsletter', '/discussion', '/donate',
-  ];
-  const all = urls.concat(rows);
+  const isoDay = (sec) =>
+    sec ? new Date(sec * 1000).toISOString().slice(0, 10) : null;
+  const entries = [
+    '/', '/about', '/contact', '/directory', '/events', '/literature',
+    '/mutual-aid', '/newsletter', '/discussion', '/donate',
+  ].map((u) => ({ loc: u, lastmod: null }));
+  entries.push(
+    ...db.prepare("SELECT slug, created_at FROM businesses WHERE status='approved'").all()
+      .map((r) => ({ loc: `/directory/${r.slug}`, lastmod: isoDay(r.created_at) })),
+    ...db.prepare("SELECT slug, created_at FROM events WHERE status='approved'").all()
+      .map((r) => ({ loc: `/events/${r.slug}`, lastmod: isoDay(r.created_at) })),
+    ...db.prepare("SELECT slug, created_at FROM books WHERE status='approved'").all()
+      .map((r) => ({ loc: `/literature/${r.slug}`, lastmod: isoDay(r.created_at) })),
+    ...db.prepare("SELECT slug, published_at, created_at FROM newsletters WHERE status='published'").all()
+      .map((r) => ({ loc: `/newsletter/${r.slug}`, lastmod: isoDay(r.published_at || r.created_at) })),
+    ...db.prepare('SELECT slug, last_activity_at FROM threads').all()
+      .map((r) => ({ loc: `/discussion/${r.slug}`, lastmod: isoDay(r.last_activity_at) }))
+  );
   const xml =
     '<?xml version="1.0" encoding="UTF-8"?>\n' +
     '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-    all
+    entries
       .map(
-        (u) =>
-          `  <url><loc>${SITE_URL}${u}</loc><changefreq>weekly</changefreq></url>`
+        (e) =>
+          '  <url><loc>' + SITE_URL + e.loc + '</loc>' +
+          (e.lastmod ? '<lastmod>' + e.lastmod + '</lastmod>' : '') +
+          '</url>'
       )
       .join('\n') +
     '\n</urlset>\n';
@@ -2215,12 +2231,189 @@ for (const [route, file] of Object.entries(pages)) {
   app.get(route, (req, res) => sendHtml(res, file));
 }
 
-app.get('/directory/:slug', (req, res) => sendHtml(res, 'business.html'));
-app.get('/events/:slug', (req, res) => sendHtml(res, 'event.html'));
-app.get('/literature/:slug', (req, res) => sendHtml(res, 'book.html'));
-app.get('/newsletter/:slug', (req, res) => sendHtml(res, 'newsletter-post.html'));
-app.get('/discussion/:slug', (req, res) => sendHtml(res, 'thread.html'));
-app.get('/mutual-aid/post/:id', (req, res) => sendHtml(res, 'aid-post.html'));
+function escapeAttr(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function excerptOf(text, max = 155) {
+  const plain = String(text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (plain.length <= max) return plain;
+  return plain.slice(0, max - 1).replace(/\s+\S*$/, '') + '…';
+}
+
+// Serve a page shell with its head rewritten for the specific record,
+// so crawlers see real titles/descriptions/JSON-LD without executing JS.
+function sendShellWithMeta(res, file, meta) {
+  let html;
+  try {
+    html = fs.readFileSync(path.join(__dirname, 'public', file), 'utf8');
+  } catch (_) {
+    return res.status(500).send('Page unavailable.');
+  }
+  const title = escapeAttr(meta.title);
+  const desc = escapeAttr(meta.description || '');
+  const url = SITE_URL + meta.path;
+  html = html
+    .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
+    .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${desc}">`)
+    .replace(/<link rel="canonical" href="[^"]*">/, `<link rel="canonical" href="${escapeAttr(url)}">`)
+    .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${title}">`)
+    .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${desc}">`)
+    .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${escapeAttr(url)}">`);
+  let headExtra = '';
+  if (meta.noindex) headExtra += '<meta name="robots" content="noindex">\n';
+  if (meta.jsonLd) {
+    // <-escape so user text can't break out of the script element.
+    const ldJson = JSON.stringify(meta.jsonLd)
+      .replace(/</g, '\\u003c')
+      .replace(/>/g, '\\u003e')
+      .replace(/&/g, '\\u0026');
+    headExtra += `<script type="application/ld+json">${ldJson}</script>\n`;
+  }
+  if (headExtra) html = html.replace('</head>', headExtra + '</head>');
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
+}
+
+function sendNotFound(res) {
+  res.set('Cache-Control', 'no-cache, must-revalidate');
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+}
+
+app.get('/directory/:slug', (req, res) => {
+  const b = db
+    .prepare(
+      `SELECT b.*, c.name AS category_name FROM businesses b
+       LEFT JOIN categories c ON c.id = b.category_id
+       WHERE b.slug = ? AND b.status = 'approved'`
+    )
+    .get(req.params.slug);
+  if (!b) return sendNotFound(res);
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'LocalBusiness',
+    name: b.name,
+    description: b.description || undefined,
+    telephone: b.phone || undefined,
+    email: b.email || undefined,
+    url: b.website || undefined,
+    address: b.address
+      ? { '@type': 'PostalAddress', streetAddress: b.address, addressLocality: b.town || undefined, addressRegion: 'IL' }
+      : undefined,
+  };
+  sendShellWithMeta(res, 'business.html', {
+    title: `${b.name}${b.town ? ' - ' + b.town : ''} - Local Lee`,
+    description: excerptOf(b.description) || `${b.name}, a locally owned business in ${b.town || 'Lee County'}, Illinois.`,
+    path: `/directory/${b.slug}`,
+    jsonLd,
+  });
+});
+
+app.get('/events/:slug', (req, res) => {
+  const e = db
+    .prepare("SELECT * FROM events WHERE slug = ? AND status = 'approved'")
+    .get(req.params.slug);
+  if (!e) return sendNotFound(res);
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Event',
+    name: e.title,
+    startDate: new Date(e.starts_at * 1000).toISOString(),
+    endDate: e.ends_at ? new Date(e.ends_at * 1000).toISOString() : undefined,
+    description: e.description || undefined,
+    eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
+    eventStatus: 'https://schema.org/EventScheduled',
+    location: e.location
+      ? { '@type': 'Place', name: e.location, address: { '@type': 'PostalAddress', addressLocality: e.town || undefined, addressRegion: 'IL' } }
+      : undefined,
+    organizer: e.organizer ? { '@type': 'Organization', name: e.organizer } : undefined,
+  };
+  sendShellWithMeta(res, 'event.html', {
+    title: `${e.title} - Local Lee`,
+    description: excerptOf(e.description) || `A community event in ${e.town || 'Lee County'}, Illinois.`,
+    path: `/events/${e.slug}`,
+    jsonLd,
+  });
+});
+
+app.get('/literature/:slug', (req, res) => {
+  const b = db
+    .prepare("SELECT * FROM books WHERE slug = ? AND status = 'approved'")
+    .get(req.params.slug);
+  if (!b) return sendNotFound(res);
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Book',
+    name: b.title,
+    author: b.author ? { '@type': 'Person', name: b.author } : undefined,
+    datePublished: b.year || undefined,
+    description: b.description || undefined,
+  };
+  sendShellWithMeta(res, 'book.html', {
+    title: `${b.title}${b.author ? ' by ' + b.author : ''} - Local Lee`,
+    description: excerptOf(b.description) || `${b.title} on the Local Lee reading list.`,
+    path: `/literature/${b.slug}`,
+    jsonLd,
+  });
+});
+
+app.get('/newsletter/:slug', (req, res) => {
+  const p = db
+    .prepare(
+      `SELECT n.*, u.display_name AS author_name
+       FROM newsletters n LEFT JOIN users u ON u.id = n.author_id
+       WHERE n.slug = ? AND n.status = 'published'`
+    )
+    .get(req.params.slug);
+  if (!p) return sendNotFound(res);
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: p.title,
+    datePublished: new Date((p.published_at || p.created_at) * 1000).toISOString(),
+    author: p.author_name ? { '@type': 'Person', name: p.author_name } : undefined,
+    description: excerptOf(p.body) || undefined,
+  };
+  sendShellWithMeta(res, 'newsletter-post.html', {
+    title: `${p.title} - Local Lee`,
+    description: excerptOf(p.body) || 'A post from the Local Lee newsletter.',
+    path: `/newsletter/${p.slug}`,
+    jsonLd,
+  });
+});
+
+app.get('/discussion/:slug', (req, res) => {
+  const t = db.prepare('SELECT * FROM threads WHERE slug = ?').get(req.params.slug);
+  if (!t) return sendNotFound(res);
+  sendShellWithMeta(res, 'thread.html', {
+    title: `${t.title} - Local Lee discussion`,
+    description: excerptOf(t.body) || 'A community discussion thread on Local Lee.',
+    path: `/discussion/${t.slug}`,
+  });
+});
+
+// Aid posts expire after 30 days, so they carry noindex.
+app.get('/mutual-aid/post/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const p = db
+    .prepare("SELECT * FROM aid_posts WHERE id = ? AND status = 'approved'")
+    .get(id);
+  if (!p) return sendNotFound(res);
+  sendShellWithMeta(res, 'aid-post.html', {
+    title: `${p.title} - Local Lee mutual aid`,
+    description: excerptOf(p.body),
+    path: `/mutual-aid/post/${p.id}`,
+    noindex: true,
+  });
+});
 
 app.use(
   express.static(path.join(__dirname, 'public'), {
