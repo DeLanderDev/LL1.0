@@ -125,15 +125,6 @@
         const { book: b, comments } = await LL.api('/api/books/' + encodeURIComponent(slug));
         book = b;
         document.title = b.title + ' - Local Lee';
-        const ld = {
-          '@context': 'https://schema.org', '@type': 'Book',
-          name: b.title, author: b.author ? { '@type': 'Person', name: b.author } : undefined,
-          datePublished: b.year || undefined, description: b.description || undefined
-        };
-        const ldEl = document.createElement('script');
-        ldEl.type = 'application/ld+json';
-        ldEl.textContent = JSON.stringify(ld);
-        document.head.appendChild(ldEl);
         root.innerHTML = `
           <div class="page-head">
             <p class="small dim"><a href="/literature">← Reading list</a></p>

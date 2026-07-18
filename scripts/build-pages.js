@@ -299,17 +299,6 @@ pages['business.html'] = shell({
       try {
         const { business: b } = await LL.api('/api/businesses/' + encodeURIComponent(slug));
         document.title = b.name + ' - Local Lee';
-        const ld = {
-          '@context': 'https://schema.org', '@type': 'LocalBusiness',
-          name: b.name, description: b.description || undefined,
-          telephone: b.phone || undefined, email: b.email || undefined,
-          url: b.website || undefined,
-          address: b.address ? { '@type': 'PostalAddress', streetAddress: b.address, addressLocality: b.town || undefined, addressRegion: 'IL' } : undefined
-        };
-        const ldEl = document.createElement('script');
-        ldEl.type = 'application/ld+json';
-        ldEl.textContent = JSON.stringify(ld);
-        document.head.appendChild(ldEl);
         root.innerHTML = \`
           <div class="page-head">
             <p class="small dim"><a href="/directory">← Directory</a>\${b.category_slug ? ' · <a href="/directory?category=' + LL.escape(b.category_slug) + '">' + LL.escape(b.category_name) + '</a>' : ''}</p>
@@ -397,21 +386,6 @@ pages['event.html'] = shell({
 
     function render() {
       const e = evt;
-      const ld = {
-        '@context': 'https://schema.org', '@type': 'Event',
-        name: e.title,
-        startDate: new Date(e.starts_at * 1000).toISOString(),
-        endDate: e.ends_at ? new Date(e.ends_at * 1000).toISOString() : undefined,
-        location: e.location ? { '@type': 'Place', name: e.location, address: { '@type': 'PostalAddress', addressLocality: e.town || undefined, addressRegion: 'IL' } } : undefined,
-        description: e.description || undefined,
-        organizer: e.organizer ? { '@type': 'Organization', name: e.organizer } : undefined,
-        eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
-        eventStatus: 'https://schema.org/EventScheduled'
-      };
-      const ldEl = document.createElement('script');
-      ldEl.type = 'application/ld+json';
-      ldEl.textContent = JSON.stringify(ld);
-      document.head.appendChild(ldEl);
 
       document.title = e.title + ' - Local Lee';
       root.innerHTML = \`
@@ -561,15 +535,6 @@ pages['book.html'] = shell({
         const { book: b, comments } = await LL.api('/api/books/' + encodeURIComponent(slug));
         book = b;
         document.title = b.title + ' - Local Lee';
-        const ld = {
-          '@context': 'https://schema.org', '@type': 'Book',
-          name: b.title, author: b.author ? { '@type': 'Person', name: b.author } : undefined,
-          datePublished: b.year || undefined, description: b.description || undefined
-        };
-        const ldEl = document.createElement('script');
-        ldEl.type = 'application/ld+json';
-        ldEl.textContent = JSON.stringify(ld);
-        document.head.appendChild(ldEl);
         root.innerHTML = \`
           <div class="page-head">
             <p class="small dim"><a href="/literature">← Reading list</a></p>
@@ -744,6 +709,7 @@ pages['login.html'] = shell({
   title: 'Sign in - Local Lee',
   description: 'Sign in to Local Lee to comment, claim a business, or post to the mutual-aid board.',
   canonical: '/login',
+  extraHead: '<meta name="robots" content="noindex">',
   main: `    <div class="auth-card">
       <h1>Sign in</h1>
       <form id="login-form" novalidate>
@@ -783,6 +749,7 @@ pages['register.html'] = shell({
   title: 'Join - Local Lee',
   description: 'Create a free Local Lee account to comment, claim a listing, or post to the mutual-aid board.',
   canonical: '/register',
+  extraHead: '<meta name="robots" content="noindex">',
   main: `    <div class="auth-card">
       <h1>Join Local Lee</h1>
       <p class="dim small">Free, no tracking, no newsletters you didn't ask for.</p>
@@ -2128,15 +2095,6 @@ pages['newsletter-post.html'] = shell({
         const data = await LL.api('/api/newsletter/' + encodeURIComponent(slug));
         post = data.post;
         document.title = post.title + ' - Local Lee';
-        const ld = {
-          '@context': 'https://schema.org', '@type': 'BlogPosting',
-          headline: post.title, datePublished: new Date((post.published_at || post.created_at) * 1000).toISOString(),
-          author: post.author_name ? { '@type': 'Person', name: post.author_name } : undefined
-        };
-        const ldEl = document.createElement('script');
-        ldEl.type = 'application/ld+json';
-        ldEl.textContent = JSON.stringify(ld);
-        document.head.appendChild(ldEl);
         const looksLikeHtml = /<[a-z][\\s\\S]*>/i.test(post.body || '');
         const bodyHtml = looksLikeHtml
           ? post.body
