@@ -261,6 +261,7 @@ function addColumnIfMissing(table, col, def) {
 }
 addColumnIfMissing('users', 'avatar_ext', 'TEXT');
 addColumnIfMissing('users', 'bio', 'TEXT');
+addColumnIfMissing('users', 'status', "TEXT NOT NULL DEFAULT 'active'");
 
 function seed() {
   const adminRow = db
@@ -487,6 +488,47 @@ app.use((req, res, next) => {
   next();
 });
 
+// Re-read the signed-in user from the DB on every request. This keeps
+// role/status changes effective on the very next request (an admin
+// demoted or a member suspended mid-session doesn't have to wait for
+// logout), and enforces the two moderation states:
+//   suspended - account disabled: session killed, treated as anonymous.
+//   muted     - read-only: can browse and log out, every other write
+//               is refused. Admins are never muted/suspended-blocked.
+function isWrite(req) {
+  return req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS';
+}
+app.use((req, res, next) => {
+  if (!req.session || !req.session.userId) return next();
+  const u = db
+    .prepare('SELECT id, role, status FROM users WHERE id = ?')
+    .get(req.session.userId);
+  // Deleted or suspended: strip identity so this request (and future
+  // ones on this cookie) are anonymous. We clear the keys rather than
+  // destroy() so req.session stays a valid object for downstream
+  // handlers that read req.session.userId.
+  if (!u || u.status === 'suspended') {
+    req.session.userId = null;
+    req.session.role = null;
+    if (u && u.status === 'suspended' && isWrite(req) && req.path !== '/api/logout') {
+      return res.status(403).json({ error: 'Your account has been suspended.' });
+    }
+    return next();
+  }
+  // Keep the session's cached role in sync with the DB.
+  req.session.role = u.role;
+  if (u.status === 'muted' && u.role !== 'admin') {
+    if (isWrite(req) && req.path !== '/api/logout') {
+      return res.status(403).json({
+        error:
+          'Your account is muted: you can browse, but posting is disabled. ' +
+          'Email contact@locallee.org if you think this is a mistake.',
+      });
+    }
+  }
+  next();
+});
+
 // Big bodies are only legitimate on authenticated upload routes; the
 // admin check runs before parsing so anonymous requests can't tie up
 // memory with oversized payloads.
@@ -710,11 +752,13 @@ app.post('/api/login', (req, res) => {
   const email = trim(req.body.email, 254).toLowerCase();
   const password = trim(req.body.password, 200);
   const user = db
-    .prepare('SELECT id, email, password_hash, role FROM users WHERE email = ?')
+    .prepare('SELECT id, email, password_hash, role, status FROM users WHERE email = ?')
     .get(email);
   if (!user) return res.status(401).json({ error: 'Invalid email or password.' });
   const ok = bcrypt.compareSync(password, user.password_hash);
   if (!ok) return res.status(401).json({ error: 'Invalid email or password.' });
+  if (user.status === 'suspended')
+    return res.status(403).json({ error: 'This account has been suspended. Email contact@locallee.org.' });
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: 'Could not start session.' });
     req.session.userId = user.id;
@@ -1068,6 +1112,161 @@ app.post('/api/contact', requireAltcha, (req, res) => {
   const message = trim(req.body.message, 4000);
   if (!name || !message) return res.status(400).json({ error: 'Name and message required.' });
   console.log(`[contact] ${new Date().toISOString()} from=${name}<${email}>: ${message}`);
+  res.json({ ok: true });
+});
+
+// ---- User management (admin) ----
+
+function activeAdminCount() {
+  return db
+    .prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND status != 'suspended'")
+    .get().n;
+}
+
+// Would this action leave the site with no usable admin? An admin is
+// "usable" only if role=admin and not suspended.
+function wouldStrandSite(targetId, { newRole, newStatus }) {
+  const t = db.prepare('SELECT role, status FROM users WHERE id = ?').get(targetId);
+  if (!t) return false;
+  const wasUsableAdmin = t.role === 'admin' && t.status !== 'suspended';
+  if (!wasUsableAdmin) return false;
+  const role = newRole || t.role;
+  const status = newStatus || t.status;
+  const stillUsable = role === 'admin' && status !== 'suspended';
+  if (stillUsable) return false;
+  return activeAdminCount() <= 1;
+}
+
+const deleteUserCascade = db.transaction((id) => {
+  db.prepare('DELETE FROM book_comments WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM newsletter_comments WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM thread_replies WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM threads WHERE user_id = ?').run(id); // cascades its replies
+  db.prepare('UPDATE businesses SET submitted_by = NULL WHERE submitted_by = ?').run(id);
+  db.prepare("UPDATE businesses SET owner_user_id = NULL, claim_status = 'unclaimed' WHERE owner_user_id = ?").run(id);
+  db.prepare('UPDATE events SET submitted_by = NULL WHERE submitted_by = ?').run(id);
+  db.prepare('UPDATE books SET submitted_by = NULL WHERE submitted_by = ?').run(id);
+  db.prepare('UPDATE aid_resources SET submitted_by = NULL WHERE submitted_by = ?').run(id);
+  db.prepare('UPDATE aid_posts SET submitted_by = NULL WHERE submitted_by = ?').run(id);
+  db.prepare('UPDATE newsletters SET author_id = NULL WHERE author_id = ?').run(id);
+  db.prepare('UPDATE business_imports SET uploaded_by = NULL WHERE uploaded_by = ?').run(id);
+  db.prepare('UPDATE event_rsvps SET user_id = NULL WHERE user_id = ?').run(id);
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
+});
+
+function userContentCounts(id) {
+  const one = (sql) => db.prepare(sql).get(id).n;
+  return {
+    businesses: one('SELECT COUNT(*) AS n FROM businesses WHERE submitted_by = ?'),
+    events: one('SELECT COUNT(*) AS n FROM events WHERE submitted_by = ?'),
+    books: one('SELECT COUNT(*) AS n FROM books WHERE submitted_by = ?'),
+    aid_resources: one('SELECT COUNT(*) AS n FROM aid_resources WHERE submitted_by = ?'),
+    aid_posts: one('SELECT COUNT(*) AS n FROM aid_posts WHERE submitted_by = ?'),
+    book_comments: one('SELECT COUNT(*) AS n FROM book_comments WHERE user_id = ?'),
+    newsletter_comments: one('SELECT COUNT(*) AS n FROM newsletter_comments WHERE user_id = ?'),
+    threads: one('SELECT COUNT(*) AS n FROM threads WHERE user_id = ?'),
+    thread_replies: one('SELECT COUNT(*) AS n FROM thread_replies WHERE user_id = ?'),
+  };
+}
+
+app.get('/api/admin/users', requireAdmin, (req, res) => {
+  const q = trim(req.query.q, 100);
+  let sql =
+    `SELECT id, email, display_name, bio, role, status, avatar_ext, created_at
+     FROM users`;
+  const params = [];
+  if (q) {
+    sql += ' WHERE email LIKE ? OR display_name LIKE ?';
+    params.push('%' + q + '%', '%' + q + '%');
+  }
+  sql += " ORDER BY (role = 'admin') DESC, created_at DESC";
+  const users = db.prepare(sql).all(...params);
+  res.json({ users, me: req.session.userId, active_admins: activeAdminCount() });
+});
+
+app.get('/api/admin/users/:id', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const u = db
+    .prepare('SELECT id, email, display_name, bio, role, status, avatar_ext, created_at FROM users WHERE id = ?')
+    .get(id);
+  if (!u) return res.status(404).json({ error: 'Not found.' });
+  res.json({ user: u, counts: userContentCounts(id) });
+});
+
+app.post('/api/admin/users/:id/status', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const status = req.body && req.body.status;
+  if (!['active', 'muted', 'suspended'].includes(status))
+    return res.status(400).json({ error: 'status must be active, muted, or suspended.' });
+  const u = db.prepare('SELECT id, role, status FROM users WHERE id = ?').get(id);
+  if (!u) return res.status(404).json({ error: 'Not found.' });
+  if (id === req.session.userId)
+    return res.status(400).json({ error: "You can't change your own status." });
+  if (status !== 'active' && wouldStrandSite(id, { newStatus: status }))
+    return res.status(400).json({ error: 'That would leave no active administrator. Promote another admin first.' });
+  db.prepare('UPDATE users SET status = ? WHERE id = ?').run(status, id);
+  res.json({ ok: true, status });
+});
+
+app.post('/api/admin/users/:id/role', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const role = req.body && req.body.role;
+  if (!['member', 'admin'].includes(role))
+    return res.status(400).json({ error: 'role must be member or admin.' });
+  const u = db.prepare('SELECT id, role, status FROM users WHERE id = ?').get(id);
+  if (!u) return res.status(404).json({ error: 'Not found.' });
+  if (id === req.session.userId)
+    return res.status(400).json({ error: "You can't change your own role." });
+  if (role === 'member' && wouldStrandSite(id, { newRole: 'member' }))
+    return res.status(400).json({ error: 'That would leave no active administrator. Promote another admin first.' });
+  db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
+  res.json({ ok: true, role });
+});
+
+app.post('/api/admin/users/:id/edit', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const u = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!u) return res.status(404).json({ error: 'Not found.' });
+  const b = req.body || {};
+  let email = u.email;
+  if (b.email !== undefined) {
+    const e = trim(b.email, 254).toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+      return res.status(400).json({ error: 'Valid email required.' });
+    const clash = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(e, id);
+    if (clash) return res.status(409).json({ error: 'Another account already uses that email.' });
+    email = e;
+  }
+  const displayName = b.display_name !== undefined ? (trim(b.display_name, 80) || null) : u.display_name;
+  const bio = b.bio !== undefined ? (trim(b.bio, 400) || null) : u.bio;
+  db.prepare('UPDATE users SET email = ?, display_name = ?, bio = ? WHERE id = ?')
+    .run(email, displayName, bio, id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/users/:id/avatar/reset', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const u = db.prepare('SELECT id FROM users WHERE id = ?').get(id);
+  if (!u) return res.status(404).json({ error: 'Not found.' });
+  for (const e of new Set(Object.values(ALLOWED_AVATAR_MIMES))) {
+    try { fs.unlinkSync(path.join(AVATAR_DIR, `${id}.${e}`)); } catch (_) {}
+  }
+  db.prepare('UPDATE users SET avatar_ext = NULL WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/users/:id/delete', requireAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const u = db.prepare('SELECT id, role, status FROM users WHERE id = ?').get(id);
+  if (!u) return res.status(404).json({ error: 'Not found.' });
+  if (id === req.session.userId)
+    return res.status(400).json({ error: "You can't delete your own account here." });
+  if (wouldStrandSite(id, { newStatus: 'suspended' }))
+    return res.status(400).json({ error: 'That would leave no active administrator. Promote another admin first.' });
+  for (const e of new Set(Object.values(ALLOWED_AVATAR_MIMES))) {
+    try { fs.unlinkSync(path.join(AVATAR_DIR, `${id}.${e}`)); } catch (_) {}
+  }
+  deleteUserCascade(id);
   res.json({ ok: true });
 });
 
