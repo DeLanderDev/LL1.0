@@ -59,6 +59,7 @@
       <div class="tabs" role="tablist">
         <button class="tab" role="tab" aria-selected="true" data-which="queue">Pending queue</button>
         <button class="tab" role="tab" aria-selected="false" data-which="manage">Manage</button>
+        <button class="tab" role="tab" aria-selected="false" data-which="users">Users</button>
         <button class="tab" role="tab" aria-selected="false" data-which="categories">Categories</button>
         <button class="tab" role="tab" aria-selected="false" data-which="import">Bulk import</button>
         <button class="tab" role="tab" aria-selected="false" data-which="newsletter">Newsletter</button>
@@ -85,6 +86,19 @@
         <section><h2>Book comments</h2><div id="m-comments"></div></section>
         <section><h2>Mutual aid: resources</h2><div id="m-aid-resources"></div></section>
         <section><h2>Mutual aid: needs &amp; offers</h2><div id="m-aid-posts"></div></section>
+      </div>
+
+      <div id="panel-users" class="panel" hidden>
+        <h2>Users</h2>
+        <p class="small dim">Everyone who has registered an account. <strong>Mute</strong> makes an account read-only (can still sign in and browse, but can't post). <strong>Suspend</strong> disables the account entirely and ends any active session. <strong>Delete</strong> removes the account for good and strips its comments, threads, and replies (submitted businesses/events stay in the directory but lose their author link). The site always keeps at least one active administrator.</p>
+        <form id="user-search" class="filters" style="margin-bottom:1rem">
+          <div class="form-row" style="flex:1 1 260px;margin:0">
+            <label for="user-q" class="sr-only">Search users</label>
+            <input id="user-q" type="search" placeholder="Search by name or email">
+          </div>
+          <button type="submit" class="btn btn-secondary">Search</button>
+        </form>
+        <div id="users-list" aria-busy="true"></div>
       </div>
 
       <div id="panel-categories" class="panel" hidden>
@@ -511,6 +525,116 @@
     });
 
     loadCategories();
+
+    // ---- users ----
+    let USERS_ME = null;
+    function statusBadge(s) {
+      if (s === 'suspended') return '<span class="tag" style="background:#f1d9c9;border-color:#d6a896">Suspended</span>';
+      if (s === 'muted') return '<span class="tag" style="background:#fff3cf;border-color:#c89c4d">Muted</span>';
+      return '<span class="tag" style="background:#d9e1c2;border-color:#a8b88a">Active</span>';
+    }
+    function userRow(u) {
+      const self = u.id === USERS_ME;
+      const name = u.display_name || u.email.split('@')[0];
+      const roleTag = u.role === 'admin' ? ' <span class="tag">Admin</span>' : '';
+      const acts = [];
+      if (self) {
+        acts.push('<span class="dim small">This is you - manage your own account from the profile page.</span>');
+      } else {
+        acts.push('<button class="btn btn-secondary" onclick="userEdit(' + u.id + ')">Edit</button>');
+        if (u.status === 'muted') acts.push('<button class="btn btn-secondary" onclick="userStatus(' + u.id + ',\'active\')">Unmute</button>');
+        else acts.push('<button class="btn btn-secondary" onclick="userStatus(' + u.id + ',\'muted\')">Mute</button>');
+        if (u.status === 'suspended') acts.push('<button class="btn btn-field" onclick="userStatus(' + u.id + ',\'active\')">Reinstate</button>');
+        else acts.push('<button class="btn btn-secondary" onclick="userStatus(' + u.id + ',\'suspended\')">Suspend</button>');
+        if (u.role === 'admin') acts.push('<button class="btn btn-secondary" onclick="userRole(' + u.id + ',\'member\')">Remove admin</button>');
+        else acts.push('<button class="btn btn-secondary" onclick="userRole(' + u.id + ',\'admin\')">Make admin</button>');
+        acts.push('<button class="btn btn-barn" onclick="userDelete(' + u.id + ',\'' + (name || '').replace(/[\\\'"]/g,'') + '\')">Delete</button>');
+      }
+      return '<article class="card" id="user-row-' + u.id + '" style="margin-bottom:.7em">' +
+        '<div id="user-view-' + u.id + '">' +
+          '<div style="display:flex;gap:.8rem;align-items:flex-start">' +
+            '<img class="avatar" src="/avatar/' + u.id + '" alt="" width="44" height="44">' +
+            '<div style="flex:1;min-width:0">' +
+              '<div class="meta">' + statusBadge(u.status) + roleTag + ' &middot; joined ' + LL.escape(LL.formatDay(u.created_at)) + (self ? ' &middot; <strong>you</strong>' : '') + '</div>' +
+              '<h3 style="margin:.1em 0">' + LL.escape(name) + '</h3>' +
+              '<div class="meta">' + LL.escape(u.email) + '</div>' +
+              (u.bio ? '<p class="small">' + LL.escape(u.bio) + '</p>' : '') +
+            '</div>' +
+          '</div>' +
+          '<div style="margin-top:.6em;display:flex;gap:.4em;flex-wrap:wrap">' + acts.join('') + '</div>' +
+        '</div></article>';
+    }
+    async function loadUsers() {
+      const root = document.getElementById('users-list');
+      root.setAttribute('aria-busy', 'true');
+      const q = document.getElementById('user-q').value.trim();
+      try {
+        const data = await LL.api('/api/admin/users' + (q ? '?q=' + encodeURIComponent(q) : ''));
+        USERS_ME = data.me;
+        root.innerHTML = data.users.length
+          ? data.users.map(userRow).join('')
+          : '<p class="dim">No users' + (q ? ' match that search' : ' yet') + '.</p>';
+      } catch (err) {
+        root.innerHTML = '<p class="dim">Could not load users: ' + LL.escape(err.message || err) + '</p>';
+      }
+      root.setAttribute('aria-busy', 'false');
+    }
+    document.getElementById('user-search').addEventListener('submit', (e) => { e.preventDefault(); loadUsers(); });
+
+    window.userStatus = async function (id, status) {
+      const verb = status === 'suspended' ? 'Suspend' : status === 'muted' ? 'Mute' : 'Reactivate';
+      if (!confirm(verb + ' this account?')) return;
+      try { await LL.api('/api/admin/users/' + id + '/status', { method: 'POST', body: { status } }); await loadUsers(); }
+      catch (err) { alert(err.message); }
+    };
+    window.userRole = async function (id, role) {
+      if (!confirm(role === 'admin' ? 'Grant admin rights to this user?' : 'Remove admin rights from this user?')) return;
+      try { await LL.api('/api/admin/users/' + id + '/role', { method: 'POST', body: { role } }); await loadUsers(); }
+      catch (err) { alert(err.message); }
+    };
+    window.userDelete = async function (id, name) {
+      if (!confirm('Permanently delete "' + name + '"? Their comments, threads, and replies are removed. This cannot be undone.')) return;
+      try { await LL.api('/api/admin/users/' + id + '/delete', { method: 'POST' }); await loadUsers(); }
+      catch (err) { alert(err.message); }
+    };
+    window.userEdit = async function (id) {
+      let data;
+      try { data = await LL.api('/api/admin/users/' + id); }
+      catch (err) { alert(err.message); return; }
+      const u = data.user, c = data.counts;
+      const view = document.getElementById('user-view-' + id);
+      if (!view) return;
+      const countLine = Object.entries(c).filter(([, n]) => n > 0)
+        .map(([k, n]) => n + ' ' + k.replace(/_/g, ' ')).join(', ') || 'no content yet';
+      view.innerHTML =
+        '<form id="user-edit-' + id + '">' +
+          '<div class="form-grid">' +
+            '<div class="form-row"><label>Display name</label><input name="display_name" type="text" maxlength="80" value="' + LL.escape(u.display_name || '') + '"></div>' +
+            '<div class="form-row"><label>Email</label><input name="email" type="email" maxlength="254" value="' + LL.escape(u.email) + '"></div>' +
+          '</div>' +
+          '<div class="form-row"><label>Bio</label><textarea name="bio" rows="2" maxlength="400">' + LL.escape(u.bio || '') + '</textarea></div>' +
+          '<p class="small dim">Content: ' + countLine + '.</p>' +
+          '<div style="display:flex;gap:.4em;flex-wrap:wrap">' +
+            '<button type="submit" class="btn btn-field">Save</button>' +
+            '<button type="button" class="btn btn-secondary" onclick="loadUsers()">Cancel</button>' +
+            '<button type="button" class="btn btn-secondary" onclick="userAvatarReset(' + id + ')">Clear avatar</button>' +
+          '</div>' +
+          '<div id="user-edit-msg-' + id + '" class="notice small" hidden></div>' +
+        '</form>';
+      document.getElementById('user-edit-' + id).addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = e.currentTarget;
+        const body = {};
+        for (const el of f.elements) if (el.name) body[el.name] = el.value;
+        try { await LL.api('/api/admin/users/' + id + '/edit', { method: 'POST', body }); await loadUsers(); }
+        catch (err) { LL.notice('#user-edit-msg-' + id, err.message, 'error'); }
+      });
+    };
+    window.userAvatarReset = async function (id) {
+      try { await LL.api('/api/admin/users/' + id + '/avatar/reset', { method: 'POST' }); await loadUsers(); }
+      catch (err) { alert(err.message); }
+    };
+    loadUsers();
 
     async function load() {
       const me = (await LL.api('/api/me')).user;
