@@ -510,14 +510,13 @@ app.use((req, res, next) => {
   if (!u || u.status === 'suspended') {
     req.session.userId = null;
     req.session.role = null;
-    if (u && u.status === 'suspended' && isWrite(req)) {
+    if (u && u.status === 'suspended' && isWrite(req) && req.path !== '/api/logout') {
       return res.status(403).json({ error: 'Your account has been suspended.' });
     }
     return next();
   }
   // Keep the session's cached role in sync with the DB.
   req.session.role = u.role;
-  req.userStatus = u.status;
   if (u.status === 'muted' && u.role !== 'admin') {
     if (isWrite(req) && req.path !== '/api/logout') {
       return res.status(403).json({
